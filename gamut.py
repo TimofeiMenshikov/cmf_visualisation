@@ -4,23 +4,27 @@ import matplotlib
 
 from scripts.render_max_xyY_aoc import find_max_Y
 
-
-
-
-
 import numpy as np
 import os
 
 from ao.spectral_converter import SpectralConverter, xyY_to_XYZ, XYZ_to_xyY
 from ao.ao_converter import AoConverter
-from ao.ao_device import AoDevice, Channel
+from ao.ao_device import AoDevice, Channel, ChannelsValidator
 
 
 from matplotlib.widgets import Button, Slider, TextBox
 from matplotlib.patches import Wedge
 from matplotlib.axes import Axes
 
+from ao_color_setter import AoColorSetterStatic
+
 from typing import Tuple, Optional, Union, List
+
+from constants import LAMBDA_RED, LAMBDA_GREEN, LAMBDA_BLUE
+
+from constants import EPS_Y
+
+
 
 # Тип для координат: список, кортеж или массив numpy
 CoordType = Union[Tuple[float, float], List[float]]
@@ -103,6 +107,7 @@ class Point:
             
         return (x, y)
 
+
     def update_point(
         self, 
         xy: Optional[CoordType] = None, 
@@ -177,7 +182,6 @@ def get_Y_ratio(point1, point2, x_sum, y_sum): # функция для полу�
     x1, y1 = point1.xy
     x2, y2 = point2.xy
     
-
     Y_ratio = ((x2 - x_sum) / (x_sum - x1)) * (y1/y2)
 
     return Y_ratio
@@ -192,7 +196,8 @@ class SpectralConverterMOD(SpectralConverter): # добавлен метод д�
         self.WAVELENGTHS = CMF.wavelengths
         self.V_LAMBDA    = CMF.values[:, 1]
     
-        self.K_M = 683.0 / 1000# лм/Вт
+        self.K_M = 683.0 / 1000 # лм/Вт
+
 
     def get_v_lambda(self, wavelength):
         """
@@ -246,23 +251,20 @@ class SpectralConverterMOD(SpectralConverter): # добавлен метод д�
 
 
     def wavelength_and_Y_to_XYZ(self, wavelength, Y):
-        x, y = self.wavelengths_to_xy(wavelength)
+
+        intensity = self.luminance_to_intensity(Y, wavelength)
+
+        x, y = self.wavelengths_to_xy(wavelength, intensity)
         xyY = np.array([x, y, Y])
         return xyY_to_XYZ(xyY)
 
 
     def two_wavelength_and_Y_to_xyY(self, Y1, Y2, wavelength1, wavelength2):
-        # intensity1 = self.luminance_to_intensity(Y1, wavelength1)
-        # intensity2 = self.luminance_to_intensity(Y2, wavelength2)
-
-        # return self.wavelenths_to_xyY([wavelength1, wavelength2], [intensity1, intensity2])
 
         XYZ1 = self.wavelength_and_Y_to_XYZ(wavelength1, Y1)
         XYZ2 = self.wavelength_and_Y_to_XYZ(wavelength2, Y2)
 
         XYZ = XYZ1 + XYZ2
-
-        #XYZ = XYZ * (Y1 + Y2) / (XYZ[1]) # нормировка на сумму якростей (пока хз почему не получается что суммарная яркость равна сумме яркостей)
 
         return XYZ_to_xyY(XYZ)
 
@@ -272,27 +274,41 @@ class SpectralConverterMOD(SpectralConverter): # добавлен метод д�
         return self.two_wavelength_and_Y_to_xyY(Y1, Y2, wavelength1, wavelength2)[:-1] # без яркости
  
 
-
 class Gamut():
 
-    def __init__(self):
+    def __init__(self, visualize_spectra = True, visualize_legend = False):
         
-        self.converter = SpectralConverterMOD(observer="1931_2", model="band")
         
         # открытие ao_converter:
         dir_path = os.path.dirname(__file__)
-        calibration_path = os.path.join(dir_path, "ao", "calibration", "2025-08-07", "amplitude_intensity_calibration_new.csv")        
-        self.ao_converter = AoConverter(calibration_path)
+     
+        calibration_path =   os.path.join(dir_path,   "ao", "calibration", "2026-02-04_median_without_IR", "amplitude_intensity_calibration.csv")        
+        table_spectra_path = os.path.join(dir_path,   "ao", "calibration", "2026-02-04_median_without_IR", "wv_intens_spectra")
 
+        self.converter = SpectralConverterMOD(observer="1931_2", model="table", table_spectra_path=table_spectra_path)
+        self.ao_converter = AoConverter(calibration_path, table_spectra_path=table_spectra_path)
 
+        self.visualize_spectra = visualize_spectra
 
         # Создаем фигуру с двумя подграфиками
-        self.fig, (self.ax, self.ax2) = plt.subplots(1, 2, figsize=(18, 9))
+        #self.fig, (self.ax, self.ax2) = plt.subplots(1, 2, figsize=(18, 9))
+
+        self.fig = plt.figure(figsize=(18, 9))
+
+        # Левая половина - гамут (ax)
+        self.ax = self.fig.add_axes([0.0, 0.2, 0.5, 0.8])  # [left, bottom, width, height]
+
+        # Правая половина - график (ax2)
+        self.ax2 = self.fig.add_axes([0.5, 0.2, 0.5, 0.5])  # начинается с 0.5 по ширине
+
+        self.ax3 = self.fig.add_axes([0.5, 0.7, 0.5, 0.3])
+        
         
         manager = plt.get_current_fig_manager()
-        manager.full_screen_toggle()  # переключить в полноэкранный режим
+        #manager.full_screen_toggle()  # переключить в полноэкранный режим
 
-        self.ax2.axis('off')
+        if not self.visualize_spectra:
+            self.ax2.axis('off')
 
         plt.rcParams.update({
             'font.size': 18,              # базовый размер шрифта
@@ -303,6 +319,7 @@ class Gamut():
             'legend.fontsize': 18,        # легенда
         })
 
+
         # Первый подграфик — CIE 1931
         colour.plotting.plot_chromaticity_diagram_CIE1931(
             axes=self.ax,
@@ -310,48 +327,125 @@ class Gamut():
             show_diagram_colours=True,
             show_spectral_locus=True,
             title='Цветовой гамут CIE 1931',
-            bounding_box=(-0.1, 0.8, -0.1, 1)
+            bounding_box=(-0.1, 1, -0.1, 1)
         )
 
-        #self.configure_plot()
+
+        self.ax.xaxis.label.set_size(12)
+        self.ax.yaxis.label.set_size(12)
+
+        plt.rcParams['xtick.labelsize'] = 12
+        plt.rcParams['ytick.labelsize'] = 12
+
 
 
         # яркости для каждой из primaries и для монохроматической волны
-        self.Y_R = 10
-        self.Y_G = 10
-        self.Y_B = 10
-        self.Y_m = 10
+        self.Y_R = 1
+        self.Y_G = 1
+        self.Y_B = 1
+        self.Y_m = 1
         # шаг изменения яркости
         self.Y_STEP = 0.05
 
         # длины волн для primaries - не меняются, для монохроматичной волны - меняются
-        self.LAMBDA_RED   = 620
-        self.LAMBDA_GREEN = 530
-        self.LAMBDA_BLUE  = 470
+        self.LAMBDA_RED   = LAMBDA_RED
+        self.LAMBDA_GREEN = LAMBDA_GREEN
+        self.LAMBDA_BLUE  = LAMBDA_BLUE
 
         self.LAMBDA_M     = 500
 
         self.N_ROUND = 4 # округление значений для того, чтобы Y корректно суммировался с Y_STEP
 
+        #self.update_Y_s()
+
         self.point_m, self.point_R, self.point_G, self.point_B, self.point_sum_1, self.point_sum_2, self.text_info = self.__init_points_and_text_info()
+
+        self.line = self.__init_primaries_triangle()
+
+        if visualize_legend:
+
+            self.ax.legend(
+                loc='upper right',
+                frameon=True,
+                framealpha=0.95,
+                edgecolor='black',
+                fancybox=True,
+                shadow=True,
+                fontsize=14
+            )        
 
         self.slider = self.__init_slider()
 
+        self.__init_spectral_visualizer()
+
         #self.__init_color_patch() # инициализация полукругов происходит в самой функции потому что сразу вызывается update_color_patch(self)
 
+
+    def __init_spectral_visualizer(self):
+
+        if not self.visualize_spectra: return
         
-    
-    def configure_plot(self):
-        self.ax2.tick_params(axis='both', labelsize=200)
-        # self.ax2.xticks(fontsize=20)
-        # self.ax2.yticks(fontsize=20)
-        self.ax2.set_xlabel('CIE 1931 x', fontsize=200)
-        self.ax2.set_ylabel('CIE 1931 y', fontsize=200)
+        I_R, I_G, I_B, I_m = self.get_intensities_from_Y()
+
+        sd_red   = self.converter.wavelengths_to_sd(self.LAMBDA_RED, I_R)
+        sd_green = self.converter.wavelengths_to_sd(self.LAMBDA_GREEN, I_G)
+        sd_blue  = self.converter.wavelengths_to_sd(self.LAMBDA_BLUE, I_B)
+        sd_mono  = self.converter.wavelengths_to_sd(self.LAMBDA_M, I_m)
+
+        wavelenghts = sd_red.wavelengths
+
+        #self.fig_spectra, self.ax_spectra = plt.subplots(figsize=(12, 8))
+
+        self.spectra_line_R, = self.ax2.plot(wavelenghts, sd_red.values,    color='red',   label = 'spectra red')
+        self.spectra_line_G, = self.ax2.plot(wavelenghts, sd_green.values,  color='green', label = 'spectra green')
+        self.spectra_line_B, = self.ax2.plot(wavelenghts, sd_blue.values,   color='blue',  label = 'spectra blue')
+
+        self.spectra_line_M, = self.ax2.plot(wavelenghts, sd_mono.values,    color='purple',label = 'spectra mono')
+
+
+    def __init_primaries_triangle(self, label='primaries triangle'):
+        """
+        Рисует треугольник, соединяющий три основные точки (primaries) пунктирной линией.
+        
+        Parameters:
+        -----------
+        ax : matplotlib.axes.Axes
+            Оси, на которых рисуется треугольник
+        primaries : array-like of shape (3, 2)
+            Массив из трех координат (x, y) для основных цветов
+            Пример: [[x_red, y_red], [x_green, y_green], [x_blue, y_blue]]
+        label : str
+            Подпись для легенды
+        
+        Returns:
+        --------
+        line : matplotlib.lines.Line2D
+            Объект линии для управления свойствами
+        """
+
+        xy_red   = self.point_R.xy
+        xy_green = self.point_G.xy
+        xy_blue  = self.point_B.xy
+
+        # Извлекаем координаты x и y, замыкаем треугольник (первая точка = последняя)
+        x_coords = [xy_red[0], xy_green[0], xy_blue[0], xy_red[0]]
+        y_coords = [xy_red[1], xy_green[1], xy_blue[1], xy_red[1]]
+        
+        # Рисуем треугольник пунктирной линией
+        line, = self.ax.plot(x_coords, y_coords, 'purple', linestyle='--', 
+                        linewidth=1.5, alpha=0.7, label=label)
+        
+
+        return line
 
 
     def __init_slider(self):
-        slider_ax = plt.axes([0.6, 0.1, 0.3, 0.03], facecolor='lightgray')
+
+        #if self.visualize_spectra: return 
+
+        slider_ax = plt.axes([0.55, 0.83, 0.3, 0.02], facecolor='lightgray')
         slider = Slider(slider_ax, 'Y_STEP', 0.05, 1, valinit=0.05, valstep=0.05)
+        slider.label.set_fontsize(10)
         slider.on_changed(self.update_slider)
 
         return slider
@@ -362,30 +456,27 @@ class Gamut():
         1) получение координат xy для primaries и стартовых координат для монохроматичной волны
         2) инициализация точек 
         """
-        self.XY_RED   = self.converter.wavelengths_to_xy(self.LAMBDA_RED)  # неизменяемые константы
-        self.XY_GREEN = self.converter.wavelengths_to_xy(self.LAMBDA_GREEN)
-        self.XY_BLUE  = self.converter.wavelengths_to_xy(self.LAMBDA_BLUE)
-        xy_m          = self.converter.wavelengths_to_xy(self.LAMBDA_M)    # нужна только для инициализации
+
+        I_R, I_G, I_B, I_m = self.get_intensities_from_Y()
+
+        print(I_R, I_G, I_B, I_m)
+
+        self.XY_RED   = self.converter.wavelengths_to_xy(self.LAMBDA_RED, I_R)  # неизменяемые константы
+        self.XY_GREEN = self.converter.wavelengths_to_xy(self.LAMBDA_GREEN, I_G)
+        self.XY_BLUE  = self.converter.wavelengths_to_xy(self.LAMBDA_BLUE, I_B)
+        xy_m          = self.converter.wavelengths_to_xy(self.LAMBDA_M, I_m)    # нужна только для инициализации
 
         point_R = Point(self.ax, self.XY_RED,   "red",   legend = 'primaries', annotation_offset=(-30, -5))
         point_G = Point(self.ax, self.XY_GREEN, "green")
         point_B = Point(self.ax, self.XY_BLUE,  "blue")
         point_m = Point(self.ax, xy_m,          "mono",  legend = 'mono', color = 'blue')
 
+        
+
         xy_sum1, xy_sum2, text1, text2, Y_sum1, Y_sum2 = self.get_sum_color_xy_and_Y()
 
         point_sum_1 = Point(self.ax, xy_sum1, text=text1, legend = 'sum 2 primaries'      , color = 'red', annotation_offset=(10, 0))
         point_sum_2 = Point(self.ax, xy_sum2, text=text2, legend = 'sum primarie and mono', color = 'magenta', annotation_offset=(10, 2))
-
-        self.ax.legend(
-            loc='upper right',
-            frameon=True,
-            framealpha=0.95,
-            edgecolor='black',
-            fancybox=True,
-            shadow=True,
-            fontsize=14
-        )
 
 
         text_info = self.__init_text_info(Y_sum1, Y_sum2)
@@ -399,20 +490,28 @@ class Gamut():
         I_B = round(self.converter.luminance_to_intensity(self.Y_B, self.LAMBDA_BLUE),  self.N_ROUND)      
         I_m = round(self.converter.luminance_to_intensity(self.Y_m, self.LAMBDA_M),     self.N_ROUND)
 
+        # проверка на то что интенсивности доступны
+
         return I_R, I_G, I_B, I_m
 
 
     def __init_text_info(self, Y_sum1, Y_sum2):
 
-        
+        #if self.visualize_spectra: return
 
-        text_info_1 = self.ax2.text(0.1, 0.95, f'Y_R = {self.Y_R}, Y_B = {self.Y_B}, Y_G = {self.Y_G}, Y_m = {self.Y_m}', fontsize = 12)
-        text_info_2 = self.ax2.text(0.1, 0.9, f'Y_sum1 = {round(Y_sum1, self.N_ROUND)} Y_sum2 = {round(Y_sum2, self.N_ROUND)}', fontsize = 12)
-        text_info_3 = self.ax2.text(0.1, 0.85, f'Y_step = {self.Y_STEP}', fontsize = 12)
+        #self.ax_text = self.fig.add_axes([0.5, 0, 1, 1])  # [left, bottom, width, height]
+        
+        self.ax3.axis('off')  # Скрыть оси
+
+     
+
+        text_info_1 = self.ax3.text(0.1, 0.9, f'Y_R = {self.Y_R}, Y_B = {self.Y_B}, Y_G = {self.Y_G}, Y_m = {self.Y_m}', fontsize = 12)
+        text_info_2 = self.ax3.text(0.1, 0.8, f'Y_sum1 = {round(Y_sum1, self.N_ROUND)} Y_sum2 = {round(Y_sum2, self.N_ROUND)}', fontsize = 12)
+        text_info_3 = self.ax3.text(0.1, 0.7, f'Y_step = {self.Y_STEP}', fontsize = 12)
 
         I_R, I_G, I_B, I_m = self.get_intensities_from_Y()
 
-        text_info_4 = self.ax2.text(0.1, 0.8, f"I_R = {I_R} I_G = {I_G} I_B = {I_B} I_m =  {I_m}", fontsize = 12)  
+        text_info_4 = self.ax3.text(0.1, 0.6, f"I_R = {I_R} I_G = {I_G} I_B = {I_B} I_m =  {I_m}", fontsize = 12)  
 
         return [text_info_1, text_info_2, text_info_3, text_info_4]
 
@@ -543,17 +642,20 @@ class Gamut():
         print("start update_Y_sum")
 
         #Y_sum = find_max_Y((x_sum, y_sum), self.ao_converter) / 2
-        Y_sum = 30
+        Y_sum = 5
 
         return Y_sum
 
 
-    
-
     def update_Y_s(self): # при изменении длины волны меняет яркости primaries, считая яркость монохроматической волны фиксированной
         
+        try:
+            self.update_points_and_text_info()
+        except:
+            pass        
+
         if self.LAMBDA_M <= self.LAMBDA_BLUE or self.LAMBDA_M >= self.LAMBDA_RED:
-       
+    
             x_sum, y_sum = find_intersection(self.point_R, self.point_B, self.point_G, self.point_m)
             Y_sum = self.update_Y_sum(x_sum, y_sum)
 
@@ -569,7 +671,7 @@ class Gamut():
 
 
         elif self.LAMBDA_M <= self.LAMBDA_GREEN:
-      
+    
             x_sum, y_sum = find_intersection(self.point_B, self.point_G, self.point_R, self.point_m)
             Y_sum = self.update_Y_sum(x_sum, y_sum)
 
@@ -602,14 +704,16 @@ class Gamut():
         self.Y_R = round(self.Y_R, self.N_ROUND)   
         self.Y_G = round(self.Y_G, self.N_ROUND)
         self.Y_B = round(self.Y_B, self.N_ROUND)
-        
+
+
+        if self.Y_R < EPS_Y: self.Y_R = 0
+        if self.Y_G < EPS_Y: self.Y_G = 0
+        if self.Y_B < EPS_Y: self.Y_B = 0
 
         print("xy", x_sum, y_sum)
         #self.ax.plot(x_sum, y_sum, 'ro', markersize=3, color='black')
         
         
-
-
     def get_frequency_and_power_from_Y_wavelength(self, Y_s, wavelengths):
 
         frequencies = self.ao_converter._get_frequency(wavelengths)
@@ -626,7 +730,31 @@ class Gamut():
         print("LAMBDA_M", self.LAMBDA_M)
 
 
+    def update_spectral_visualizer(self):
+        #if not self.visualize_spectra: return
+        
+        I_R, I_G, I_B, I_m = self.get_intensities_from_Y()
+
+        sd_red   = self.converter.wavelengths_to_sd(self.LAMBDA_RED, I_R)
+        sd_green = self.converter.wavelengths_to_sd(self.LAMBDA_GREEN, I_G)
+        sd_blue  = self.converter.wavelengths_to_sd(self.LAMBDA_BLUE, I_B)
+        sd_mono  = self.converter.wavelengths_to_sd(self.LAMBDA_M, I_m)
+
+        wavelenghts = sd_red.wavelengths
+
+        self.spectra_line_R.set_data(wavelenghts, sd_red.values)    
+        self.spectra_line_G.set_data(wavelenghts, sd_green.values)
+        self.spectra_line_B.set_data(wavelenghts, sd_blue.values)   
+
+        self.spectra_line_M.set_data(wavelenghts, sd_mono.values)
+
+        #self.fig_spectra.canvas.draw_idle()
+
+
     def update_text_info(self, Y_sum1=None, Y_sum2=None):
+
+        #if self.visualize_spectra: return
+
         self.text_info[0].set_text(f'Y_R = {self.Y_R}, Y_B = {self.Y_B}, Y_G = {self.Y_G}, Y_m = {self.Y_m}')
         if Y_sum1 != None or Y_sum2 != None:
 
@@ -646,17 +774,46 @@ class Gamut():
          
     def update_points_and_text_info(self):
 
-        xy_m = self.converter.wavelengths_to_xy(self.LAMBDA_M)
+        I_R, I_G, I_B, I_m = self.get_intensities_from_Y()
+
+        print("start update points and text info")
+
+        xy_m          = self.converter.wavelengths_to_xy(self.LAMBDA_M,     I_m)
+        self.XY_RED   = self.converter.wavelengths_to_xy(self.LAMBDA_RED,   I_R)
+        self.XY_GREEN = self.converter.wavelengths_to_xy(self.LAMBDA_GREEN, I_G)
+        self.XY_BLUE  = self.converter.wavelengths_to_xy(self.LAMBDA_BLUE,  I_B)
+
         self.point_m.update_point(xy_m)
+        self.point_R.update_point(self.XY_RED)
+        self.point_G.update_point(self.XY_GREEN)
+        self.point_B.update_point(self.XY_BLUE)
+
 
         xy_sum1, xy_sum2, text1, text2, Y_sum1, Y_sum2 = self.get_sum_color_xy_and_Y()
+
         self.point_sum_1.update_point(xy_sum1, text=text1)
         self.point_sum_2.update_point(xy_sum2, text=text2)
 
         self.update_text_info(Y_sum1, Y_sum2)
 
 
+    def update_primaries_triangle(self):
+
+        xy_red   = self.point_R.xy
+        xy_green = self.point_G.xy
+        xy_blue  = self.point_B.xy
+
+        # Извлекаем координаты x и y, замыкаем треугольник (первая точка = последняя)
+        x_coords = [xy_red[0], xy_green[0], xy_blue[0], xy_red[0]]
+        y_coords = [xy_red[1], xy_green[1], xy_blue[1], xy_red[1]]
+
+        self.line.set_data(x_coords, y_coords)
+
+
+
     def update_slider(self, Y_STEP):
+
+        #if self.visualize_spectra: return 
         
         self.Y_STEP = round(Y_STEP, self.N_ROUND)
         self.update_text_info()
@@ -664,6 +821,8 @@ class Gamut():
 
     def redraw_gamut(self):
         self.update_points_and_text_info()
+        self.update_primaries_triangle()
+        self.update_spectral_visualizer()
         #self.update_color_patch()
         
 
@@ -672,9 +831,13 @@ class Gamut():
         self.fig.canvas.draw_idle()         # Запрашиваем перерисовку [[7]]
 
 
+
+
     def update_gamut(self, event):
 
         n_changed_channel = -1 # Номер измененного канала 0 - красный 1 - зеленый 2 - синий 3 - монохроматичный свет
+        update_color_setter_mode = -1
+
 
         is_changed = False
        
@@ -753,9 +916,13 @@ class Gamut():
 
         elif event.key == 'm':
             self.LAMBDA_M += 1
+
+            if self.LAMBDA_M in [self.LAMBDA_RED, self.LAMBDA_GREEN, self.LAMBDA_BLUE]: # чтобы длина монохроматической волны не была равна primaires
+                self.LAMBDA_M += 1
             
             if self.LAMBDA_M > 780: self.LAMBDA_M = 780
-            else:                   
+            else:           
+                Point(self.ax, self.point_m.xy, "",  legend = 'mono', color = 'blue')        
                 is_changed = True
                 n_changed_channel = 3
                 self.update_Y_s()
@@ -764,11 +931,22 @@ class Gamut():
         elif event.key == 'M':        
             self.LAMBDA_M -= 1
 
+            if self.LAMBDA_M in [self.LAMBDA_RED, self.LAMBDA_GREEN, self.LAMBDA_BLUE]: # чтобы длина монохроматической волны не была равна primaires
+                self.LAMBDA_M -= 1
+
             if self.LAMBDA_M < 380: self.LAMBDA_M = 380
             else:                   
                 is_changed = True
                 n_changed_channel = 3
                 self.update_Y_s()
+
+
+
+        elif event.key == 'y':
+            update_color_setter_mode = 1
+
+        elif event.key == 'Y':
+            update_color_setter_mode = 2
 
         
         elif event.key == 'q':             # Закрываем окно
@@ -780,6 +958,5 @@ class Gamut():
             self.redraw_gamut()
 
 
-
-        return is_changed, n_changed_channel
+        return is_changed, n_changed_channel, update_color_setter_mode
 

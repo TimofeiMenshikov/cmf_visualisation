@@ -6,12 +6,12 @@ import os
 
 from matplotlib.widgets import Button, Slider, TextBox
 from ao.ao_device import AoDevice, Channel
-from ao_color_setter import AoColorSetter
+from ao_color_setter import AoColorSetter, AoColorSetterStatic
 from gamut import Gamut
 
 
 class AoDeviceExperiment():
-    def __init__(self, read_output = False, simulate = False, logger = None):
+    def __init__(self, read_output = False, simulate = True, logger = None, visualize_spectra = True):
 
         self.DATA_FILENAME = "data.txt"
         self.IS_SAVED_DATA = False
@@ -21,9 +21,12 @@ class AoDeviceExperiment():
 
         self.ao = AoDevice(read_output, simulate, logger)
 
-        self.ao_color_setter = AoColorSetter(self.ao, self.get_frequency_and_power)
+        #self.ao_color_setter = AoColorSetter(self.ao, self.get_frequency_and_power)
+        self.ao_color_setter_static = AoColorSetterStatic(self.ao, self.get_frequency_and_power)
 
-        self.gamut = Gamut()
+
+        self.visualize_spectra = visualize_spectra
+        self.gamut = Gamut(visualize_spectra=self.visualize_spectra)
 
         self.gamut.fig.canvas.mpl_connect('key_press_event', self.handle_key_press)
 
@@ -41,11 +44,16 @@ class AoDeviceExperiment():
         #self.start_ao_device()
         print(self.ao.is_connected)
 
-        self.ao_color_setter.start()
+        #self.ao_color_setter.start()
+        self.ao_color_setter_static.start()
 
 
     def __init_text_box(self):                        # текстовое поле - аналог нажатия клавишами поэтому его инициализация находится вне гамута
-        ax_textbox = plt.axes([0.68, 0.7, 0.05, 0.05]) 
+
+        #if self.visualize_spectra: return None, None
+
+        #plt.figure(self.gamut.fig.number)  # Делаем fig1 активной
+        ax_textbox = plt.axes([0.62, 0.7, 0.05, 0.05]) 
 
         textbox = TextBox(ax_textbox, 'Lambda mono', initial=str(self.gamut.LAMBDA_M))
         textbox.text_disp.set_fontsize(12)
@@ -63,12 +71,20 @@ class AoDeviceExperiment():
 
 
     def __init_button(self):
-        ax_save_button = plt.axes([0.55, 0.15, 0.1, 0.04], facecolor='red') 
-        ax_reset_button = plt.axes([0.75, 0.15, 0.1, 0.04], facecolor='red')
+
+        #if self.visualize_spectra: return None, None
+
+        plt.figure(self.gamut.fig.number)  # Делаем fig1 активной
+        ax_save_button = plt.axes([0.55, 0.78, 0.12, 0.04], facecolor='red') 
+        ax_reset_button = plt.axes([0.75, 0.78, 0.12, 0.04], facecolor='red')
     
 
         save_button = Button(ax_save_button, 'Save to file') 
         reset_button = Button(ax_reset_button, 'Reset experiment')
+
+        save_button.label.set_fontsize(12)
+        reset_button.label.set_fontsize(12)
+
         
         save_button.on_clicked(self.save_to_file)
         reset_button.on_clicked(self.reset_experiment)
@@ -141,22 +157,17 @@ class AoDeviceExperiment():
 
     def reset_experiment(self, event):
 
-        
-
         self.gamut.update_Y_s()
 
         self.gamut.redraw_gamut()
 
         self.IS_SAVED_DATA = False
 
-        
-
-
         print("reset button is pressed")
 
 
     def handle_key_press(self, event):
-        is_changed, n_changed_channel = self.gamut.update_gamut(event)
+        is_changed, n_changed_channel, update_color_setter_mode = self.gamut.update_gamut(event)
 
         if is_changed:
             
@@ -164,6 +175,11 @@ class AoDeviceExperiment():
 
             self.update_ao_device(n_changed_channel)
             self.dump_info()
+
+        elif update_color_setter_mode == 1:
+            self.ao_color_setter_static.set_mode_1()
+        elif update_color_setter_mode == 2:
+            self.ao_color_setter_static.set_mode_2()
 
 
     def get_frequency_and_power(self): # получает значения частоты и мощности из параметров яркости и длин волн
@@ -192,7 +208,8 @@ class AoDeviceExperiment():
 
         frequencies, powers = self.get_frequency_and_power()
 
-        self.ao_color_setter.update(frequencies, powers)
+        #self.ao_color_setter.update(frequencies, powers)
+        self.ao_color_setter_static.update(frequencies, powers)
 
         #self.ao._send_single_channel_if_changed(n_channel, Channel(frequencies[n_channel], powers[n_channel]))
 

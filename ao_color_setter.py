@@ -74,7 +74,6 @@ class AoColorSetter:
                 [blue_channel, mono_channel]
             )
 
-
             if self._stop_event.wait(self.period):
                 break
 
@@ -109,10 +108,82 @@ class AoColorSetter:
 
         log_line = (
             f"[{timestamp}] MODE: {mode_name} | "
-            f"ACTIVE: [{active_info}]\n"
-            
+            f"ACTIVE: [{active_info}]\n"          
         )
 
         with self._log_lock:
             with open("log.txt", "a", encoding="utf-8") as f:
                 f.write(log_line)
+
+
+class AoColorSetterStatic:
+    def __init__(self, ao_device, get_frequency_and_power_func):
+        """
+        ao_device — объект с методом set_channels(...)
+        get_frequency_and_power_func — функция получения (frequencies, powers)
+        period — период переключения в секундах
+        """
+        self.ao = ao_device
+        self.get_frequency_and_power = get_frequency_and_power_func
+        
+        self._current_settings = None 
+
+
+    def start(self):
+
+        frequencies, powers = self.get_frequency_and_power()
+        self._current_settings = (frequencies, powers)
+
+        print("AOColorSetterStatic запущен")
+
+
+    def update(self, frequencies, powers):
+        
+        self._current_settings = (frequencies, powers)
+        print("Частоты обновлены")
+
+    def set_mode_1(self):
+            
+        frequencies, powers = self._current_settings
+
+        red_channel   = Channel(frequencies[0], powers[0])
+        green_channel = Channel(frequencies[1], powers[1])
+        blue_channel  = Channel(frequencies[2], powers[2])
+        mono_channel  = Channel(frequencies[3], powers[3])
+
+        self.ao.set_channels(red_channel, green_channel)
+        self._log_channels(
+            "RED+GREEN",
+            [red_channel, green_channel]
+        )
+
+
+    def set_mode_2(self):
+        frequencies, powers = self._current_settings
+
+        red_channel   = Channel(frequencies[0], powers[0])
+        green_channel = Channel(frequencies[1], powers[1])
+        blue_channel  = Channel(frequencies[2], powers[2])
+        mono_channel  = Channel(frequencies[3], powers[3])
+
+        self.ao.set_channels(blue_channel, mono_channel)
+        self._log_channels(
+            "BLUE+MONO",
+            [blue_channel, mono_channel]
+        )
+
+
+    def _log_channels(self, mode_name, active_channels):
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        active_info = ", ".join(str(ch) for ch in active_channels)
+        
+        log_line = (
+            f"[{timestamp}] MODE: {mode_name} | "
+            f"ACTIVE: [{active_info}]\n"
+            
+        )
+
+        with open("log.txt", "a", encoding="utf-8") as f:
+            f.write(log_line)
