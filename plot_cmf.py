@@ -123,6 +123,7 @@ class Plot():
 
         self.data.sort(key = lambda x: x[0])
         self.get_real_data()
+        print(data)
         self.wavelength = [row[0] for row in self.data]
 
         self.V_lambda_dict = self.get_V_lambda_dict()
@@ -141,7 +142,7 @@ class Plot():
 
         V_lambda_dict = dict(zip(wavelengths, V_lambda))
 
-        print(V_lambda_dict)
+        #print(V_lambda_dict)
 
         return V_lambda_dict
     
@@ -259,13 +260,13 @@ class Plot():
         self.ax1.set_ylim(self.ymin, self.ymax)  # [мин, макс] — подберите под ваши данные 
 
 
-        x_smooth_R, cmf_smooth_R = smooth_cmf(self.wavelength, self.normed_R, method = 'cubic')
-        x_smooth_G, cmf_smooth_G = smooth_cmf(self.wavelength, self.normed_G, method = 'cubic')
-        x_smooth_B, cmf_smooth_B = smooth_cmf(self.wavelength, self.normed_B, method = 'cubic')
+        # x_smooth_R, cmf_smooth_R = smooth_cmf(self.wavelength, self.normed_R, method = 'cubic')
+        # x_smooth_G, cmf_smooth_G = smooth_cmf(self.wavelength, self.normed_G, method = 'cubic')
+        # x_smooth_B, cmf_smooth_B = smooth_cmf(self.wavelength, self.normed_B, method = 'cubic')
 
-        # x_smooth_R, cmf_smooth_R = self.wavelength, self.normed_R
-        # x_smooth_G, cmf_smooth_G = self.wavelength, self.normed_G
-        # x_smooth_B, cmf_smooth_B = self.wavelength, self.normed_B
+        x_smooth_R, cmf_smooth_R = self.wavelength, self.normed_R
+        x_smooth_G, cmf_smooth_G = self.wavelength, self.normed_G
+        x_smooth_B, cmf_smooth_B = self.wavelength, self.normed_B
 
     
         self.line_R, = self.ax1.plot(x_smooth_R, cmf_smooth_R, color='red',   label = 'CMF red')
@@ -340,4 +341,3 @@ if __name__ == "__main__":
 
     
     plot.show_plot()
-

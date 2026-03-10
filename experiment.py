@@ -11,7 +11,7 @@ from gamut import Gamut
 
 
 class AoDeviceExperiment():
-    def __init__(self, read_output = False, simulate = True, logger = None, visualize_spectra = True):
+    def __init__(self, read_output = False, simulate = True, visualize_spectra = True):
 
         self.DATA_FILENAME = "data.txt"
         self.IS_SAVED_DATA = False
@@ -19,14 +19,16 @@ class AoDeviceExperiment():
         self.MIN_LAMBDA = 443.4
         self.MAX_LAMBDA = 743.6
 
-        self.ao = AoDevice(read_output, simulate, logger)
-
-        #self.ao_color_setter = AoColorSetter(self.ao, self.get_frequency_and_power)
-        self.ao_color_setter_static = AoColorSetterStatic(self.ao, self.get_frequency_and_power)
-
+        self.ao = AoDevice(read_output, simulate)
 
         self.visualize_spectra = visualize_spectra
         self.gamut = Gamut(visualize_spectra=self.visualize_spectra)
+
+        #self.ao_color_setter = AoColorSetter(self.ao, self.get_frequency_and_power)
+        self.ao_color_setter_static = AoColorSetterStatic(self.ao, self.get_frequency_and_power, self.gamut.LAMBDA_M)
+
+
+
 
         self.gamut.fig.canvas.mpl_connect('key_press_event', self.handle_key_press)
 
@@ -43,7 +45,7 @@ class AoDeviceExperiment():
         self.ao.find_device()
         #self.start_ao_device()
         print(self.ao.is_connected)
-
+        self.ao.turn_on_preamp()
         #self.ao_color_setter.start()
         self.ao_color_setter_static.start()
 
@@ -173,13 +175,14 @@ class AoDeviceExperiment():
             
             self.IS_SAVED_DATA = False
 
+            print("before update ao device")
             self.update_ao_device(n_changed_channel)
             self.dump_info()
 
         elif update_color_setter_mode == 1:
-            self.ao_color_setter_static.set_mode_1()
+            self.ao_color_setter_static.set_color_mode(mode = 1)
         elif update_color_setter_mode == 2:
-            self.ao_color_setter_static.set_mode_2()
+            self.ao_color_setter_static.set_color_mode(mode = 2)
 
 
     def get_frequency_and_power(self): # получает значения частоты и мощности из параметров яркости и длин волн
@@ -209,7 +212,7 @@ class AoDeviceExperiment():
         frequencies, powers = self.get_frequency_and_power()
 
         #self.ao_color_setter.update(frequencies, powers)
-        self.ao_color_setter_static.update(frequencies, powers)
+        self.ao_color_setter_static.update(frequencies, powers, self.gamut.LAMBDA_M)
 
         #self.ao._send_single_channel_if_changed(n_channel, Channel(frequencies[n_channel], powers[n_channel]))
 
@@ -225,8 +228,13 @@ class AoDeviceExperiment():
             
 def main():
 
-    ao_experiment = AoDeviceExperiment(read_output=True, simulate=True)
+    ao_experiment = AoDeviceExperiment(read_output=True, simulate=False)
+
+    ao_experiment.ao.turn_off_preamp()
     
 
 if __name__ == "__main__":
     main()
+
+
+    
