@@ -6,14 +6,8 @@ from matplotlib.widgets import Slider
 
 from ao.spectral_converter import SpectralConverter
 
-
-
-
 from scipy.interpolate import CubicSpline, PchipInterpolator, make_interp_spline
 from scipy.ndimage import gaussian_filter1d
-
-
-
 from scipy import integrate
 
 
@@ -120,7 +114,7 @@ class Plot():
         self.LAMBDA_BLUE  = LAMBDA_BLUE
 
         self.ymin = -0.1
-        self.ymax =  0.5
+        self.ymax =  1
 
 
         self.data = data
@@ -165,7 +159,7 @@ class Plot():
 
         normed_R = self.norm_y(R, self.wavelength)
         normed_G = self.norm_y(G, self.wavelength)
-        normed_B = self.norm_y(B, self.wavelength, k = 5)
+        normed_B = self.norm_y(B, self.wavelength, k = 1.5)
 
         return normed_R, normed_G, normed_B
         
@@ -214,6 +208,8 @@ class Plot():
     def norm_int(self, int_r, int_g, int_b, int_m, lam): 
 
         sum_int = (int_r + int_g + int_b) * int_m
+
+        if sum_int == 0: return 0, 0, 0
 
         int_r /= sum_int
         int_g /= sum_int
@@ -266,6 +262,10 @@ class Plot():
         x_smooth_R, cmf_smooth_R = smooth_cmf(self.wavelength, self.normed_R, method = 'cubic')
         x_smooth_G, cmf_smooth_G = smooth_cmf(self.wavelength, self.normed_G, method = 'cubic')
         x_smooth_B, cmf_smooth_B = smooth_cmf(self.wavelength, self.normed_B, method = 'cubic')
+
+        # x_smooth_R, cmf_smooth_R = self.wavelength, self.normed_R
+        # x_smooth_G, cmf_smooth_G = self.wavelength, self.normed_G
+        # x_smooth_B, cmf_smooth_B = self.wavelength, self.normed_B
 
     
         self.line_R, = self.ax1.plot(x_smooth_R, cmf_smooth_R, color='red',   label = 'CMF red')

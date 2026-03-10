@@ -20,9 +20,11 @@ from ao_color_setter import AoColorSetterStatic
 
 from typing import Tuple, Optional, Union, List
 
-from constants import LAMBDA_RED, LAMBDA_GREEN, LAMBDA_BLUE
+from constants import LAMBDA_RED, LAMBDA_GREEN, LAMBDA_BLUE, LAMBDA_M_START, Y_STEP_START
 
-from constants import EPS_Y
+from constants import L_R, L_G, L_B 
+
+from constants import EPS_INT
 
 
 
@@ -274,9 +276,14 @@ class SpectralConverterMOD(SpectralConverter): # добавлен метод д�
         return self.two_wavelength_and_Y_to_xyY(Y1, Y2, wavelength1, wavelength2)[:-1] # без яркости
  
 
+
+
+
+
+
 class Gamut():
 
-    def __init__(self, visualize_spectra = True, visualize_legend = False):
+    def __init__(self, visualize_spectra = True, visualize_legend = False, full_screen = False):
         
         
         # открытие ao_converter:
@@ -290,9 +297,6 @@ class Gamut():
 
         self.visualize_spectra = visualize_spectra
 
-        # Создаем фигуру с двумя подграфиками
-        #self.fig, (self.ax, self.ax2) = plt.subplots(1, 2, figsize=(18, 9))
-
         self.fig = plt.figure(figsize=(18, 9))
 
         # Левая половина - гамут (ax)
@@ -303,9 +307,9 @@ class Gamut():
 
         self.ax3 = self.fig.add_axes([0.5, 0.7, 0.5, 0.3])
         
-        
-        manager = plt.get_current_fig_manager()
-        #manager.full_screen_toggle()  # переключить в полноэкранный режим
+        if full_screen:
+            manager = plt.get_current_fig_manager()
+            manager.full_screen_toggle()  # переключить в полноэкранный режим
 
         if not self.visualize_spectra:
             self.ax2.axis('off')
@@ -345,14 +349,14 @@ class Gamut():
         self.Y_B = 1
         self.Y_m = 1
         # шаг изменения яркости
-        self.Y_STEP = 0.05
+        self.Y_STEP = Y_STEP_START
 
         # длины волн для primaries - не меняются, для монохроматичной волны - меняются
         self.LAMBDA_RED   = LAMBDA_RED
         self.LAMBDA_GREEN = LAMBDA_GREEN
         self.LAMBDA_BLUE  = LAMBDA_BLUE
 
-        self.LAMBDA_M     = 500
+        self.LAMBDA_M     = LAMBDA_M_START
 
         self.N_ROUND = 4 # округление значений для того, чтобы Y корректно суммировался с Y_STEP
 
@@ -374,9 +378,11 @@ class Gamut():
                 fontsize=14
             )        
 
-        self.slider = self.__init_slider()
+        self.slider =  self.__init_slider()
 
         self.__init_spectral_visualizer()
+
+        
 
         #self.__init_color_patch() # инициализация полукругов происходит в самой функции потому что сразу вызывается update_color_patch(self)
 
@@ -469,14 +475,14 @@ class Gamut():
         point_R = Point(self.ax, self.XY_RED,   "red",   legend = 'primaries', annotation_offset=(-30, -5))
         point_G = Point(self.ax, self.XY_GREEN, "green")
         point_B = Point(self.ax, self.XY_BLUE,  "blue")
-        point_m = Point(self.ax, xy_m,          "mono",  legend = 'mono', color = 'blue')
+        point_m = Point(self.ax, xy_m,          "mono",  legend = 'mono', color = 'blue', annotation_offset=(-30, 5))
 
         
 
         xy_sum1, xy_sum2, text1, text2, Y_sum1, Y_sum2 = self.get_sum_color_xy_and_Y()
 
-        point_sum_1 = Point(self.ax, xy_sum1, text=text1, legend = 'sum 2 primaries'      , color = 'red', annotation_offset=(10, 0))
-        point_sum_2 = Point(self.ax, xy_sum2, text=text2, legend = 'sum primarie and mono', color = 'magenta', annotation_offset=(10, 2))
+        point_sum_1 = Point(self.ax, xy_sum1, text=text1, legend = 'sum 2 primaries'      , color = 'red', annotation_offset=(10, -5))
+        point_sum_2 = Point(self.ax, xy_sum2, text=text2, legend = 'sum primarie and mono', color = 'magenta', annotation_offset=(10, 5))
 
 
         text_info = self.__init_text_info(Y_sum1, Y_sum2)
@@ -490,20 +496,18 @@ class Gamut():
         I_B = round(self.converter.luminance_to_intensity(self.Y_B, self.LAMBDA_BLUE),  self.N_ROUND)      
         I_m = round(self.converter.luminance_to_intensity(self.Y_m, self.LAMBDA_M),     self.N_ROUND)
 
-        # проверка на то что интенсивности доступны
+
+        wavelengths = [self.LAMBDA_RED, self.LAMBDA_GREEN, self.LAMBDA_BLUE, self.LAMBDA_M]
+        intensities = [I_R, I_G, I_B, I_m]
+
+        # должна быть проверка на то что интенсивности доступны
 
         return I_R, I_G, I_B, I_m
 
 
     def __init_text_info(self, Y_sum1, Y_sum2):
-
-        #if self.visualize_spectra: return
-
-        #self.ax_text = self.fig.add_axes([0.5, 0, 1, 1])  # [left, bottom, width, height]
         
         self.ax3.axis('off')  # Скрыть оси
-
-     
 
         text_info_1 = self.ax3.text(0.1, 0.9, f'Y_R = {self.Y_R}, Y_B = {self.Y_B}, Y_G = {self.Y_G}, Y_m = {self.Y_m}', fontsize = 12)
         text_info_2 = self.ax3.text(0.1, 0.8, f'Y_sum1 = {round(Y_sum1, self.N_ROUND)} Y_sum2 = {round(Y_sum2, self.N_ROUND)}', fontsize = 12)
@@ -514,87 +518,6 @@ class Gamut():
         text_info_4 = self.ax3.text(0.1, 0.6, f"I_R = {I_R} I_G = {I_G} I_B = {I_B} I_m =  {I_m}", fontsize = 12)  
 
         return [text_info_1, text_info_2, text_info_3, text_info_4]
-
-
-    def __init_color_patch(self):
-        circle_center = (0.1, 0.9)  # Координаты (x, y)
-        circle_radius = 0.05          # Размер круга
-
-        # 2. Создаем левый полукруг
-        # Углы: от 90 (верх) до 270 (низ) против часовой стрелки
-        self.left_semicircle = Wedge(circle_center, circle_radius, 90, 270, 
-                                color='blue', alpha=0.7, zorder=10)
-
-        # 3. Создаем правый полукруг
-        # Углы: от 270 (низ) до 90 (верх)
-        self.right_semicircle = Wedge(circle_center, circle_radius, 270, 90, 
-                                color='red', alpha=0.7, zorder=10)
-
-        # 4. Добавляем их на график (на вашу ось ax1)
-        self.ax2.add_patch(self.left_semicircle)
-        self.ax2.add_patch(self.right_semicircle)
-
-        self.update_color_patch()
-
-
-    @staticmethod
-    def xyY_to_nonlinear_sRGB(x, y, Y):
-        """
-        Преобразует координаты x, y, Y в нелинейный sRGB (0-255).
-        Возвращает кортеж (R, G, B).
-        """
-        
-        # --- 1. xyY -> XYZ ---
-        if y == 0:
-            X, Z = 0, 0
-        else:
-            X = (x / y) * Y
-            Z = ((1 - x - y) / y) * Y
-        
-        XYZ = np.array([X, Y, Z])
-        
-        # --- 2. XYZ -> Linear RGB (матрица для sRGB, illuminant D65) ---
-        # Матрица преобразования
-        M = np.array([
-            [ 3.2406, -1.5372, -0.4986],
-            [-0.9689,  1.8758,  0.0415],
-            [ 0.0557, -0.2040,  1.0570]
-        ])
-        
-        rgb_linear = np.dot(M, XYZ)
-        
-        # --- 3. Gamma Correction (Linear -> Nonlinear) ---
-        def gamma_correct(c):
-            if c <= 0.0031308:
-                return 12.92 * c
-            else:
-                return 1.055 * (c ** (1/2.4)) - 0.055
-        
-        # Применяем гамму к каждому каналу
-        rgb_nonlinear = np.array([gamma_correct(c) for c in rgb_linear])
-        
-        # --- 4. Обрезка и масштабирование (0-255) ---
-        # Цвета вне гаммы будут обрезаны до 0..1
-        print("rgb_nonlinear", rgb_nonlinear)
-        rgb_nonlinear = np.clip(rgb_nonlinear, 0, 1) 
-        
-        
-        return rgb_nonlinear  # Возвращает [R, G, B]
-    
-
-    def update_color_patch(self):
-
-        xy_sum1, xy_sum2, _, _, Y_sum1, Y_sum2 = self.get_sum_color_xy_and_Y()
-
-        RGB_left  = self.xyY_to_nonlinear_sRGB(xy_sum1[0], xy_sum1[1], Y_sum1) 
-        RGB_right = self.xyY_to_nonlinear_sRGB(xy_sum2[0], xy_sum2[1], Y_sum2) 
-        
-        print("RGB_left", RGB_left)
-        print("RGB_right", RGB_right)
-        
-        self.left_semicircle.set_facecolor(RGB_left)
-        self.right_semicircle.set_facecolor(RGB_right)
-        self.fig.canvas.draw_idle()
 
 
     def get_sum_color_xy_and_Y(self):
@@ -642,77 +565,106 @@ class Gamut():
         print("start update_Y_sum")
 
         #Y_sum = find_max_Y((x_sum, y_sum), self.ao_converter) / 2
-        Y_sum = 5
+        Y_sum = 80 * self.converter.get_v_lambda(self.LAMBDA_M)
 
         return Y_sum
 
 
     def update_Y_s(self): # при изменении длины волны меняет яркости primaries, считая яркость монохроматической волны фиксированной
         
-        try:
-            self.update_points_and_text_info()
-        except:
-            pass        
+        self.Y_R = 15
 
-        if self.LAMBDA_M <= self.LAMBDA_BLUE or self.LAMBDA_M >= self.LAMBDA_RED:
-    
-            x_sum, y_sum = find_intersection(self.point_R, self.point_B, self.point_G, self.point_m)
-            Y_sum = self.update_Y_sum(x_sum, y_sum)
-
-            Y_R_B_ratio = get_Y_ratio(self.point_R, self.point_B, x_sum, y_sum)
-            Y_G_m_ratio = get_Y_ratio(self.point_G, self.point_m, x_sum, y_sum)
-
-            
-            self.Y_m = Y_sum / (1 + Y_G_m_ratio)
-            self.Y_G = self.Y_m * Y_G_m_ratio
-
-            self.Y_B = Y_sum / (1 + Y_R_B_ratio)
-            self.Y_R = self.Y_B * Y_R_B_ratio
-
-
-        elif self.LAMBDA_M <= self.LAMBDA_GREEN:
-    
-            x_sum, y_sum = find_intersection(self.point_B, self.point_G, self.point_R, self.point_m)
-            Y_sum = self.update_Y_sum(x_sum, y_sum)
-
-            Y_B_G_ratio = get_Y_ratio(self.point_B, self.point_G, x_sum, y_sum)
-            Y_R_m_ratio = get_Y_ratio(self.point_R, self.point_m, x_sum, y_sum)
-
-
-            self.Y_m = Y_sum / (1 + Y_R_m_ratio)
-            self.Y_R = self.Y_m * Y_R_m_ratio
-
-            self.Y_G = Y_sum / (1 + Y_B_G_ratio)
-            self.Y_B = self.Y_G * Y_B_G_ratio
-
-        elif self.LAMBDA_M <= self.LAMBDA_RED:
-
-            x_sum, y_sum = find_intersection(self.point_R, self.point_G, self.point_B, self.point_m)
-            Y_sum = self.update_Y_sum(x_sum, y_sum)
-
-            Y_R_G_ratio = get_Y_ratio(self.point_R, self.point_G, x_sum, y_sum)
-            Y_B_m_ratio = get_Y_ratio(self.point_B, self.point_m, x_sum, y_sum)
-
-            self.Y_m = Y_sum / (1 + Y_B_m_ratio)
-            self.Y_B = self.Y_m * Y_B_m_ratio
-
-            
-
-            self.Y_G = Y_sum / (1 + Y_R_G_ratio)
-            self.Y_R = self.Y_G * Y_R_G_ratio
-
-        self.Y_R = round(self.Y_R, self.N_ROUND)   
-        self.Y_G = round(self.Y_G, self.N_ROUND)
-        self.Y_B = round(self.Y_B, self.N_ROUND)
-
-
-        if self.Y_R < EPS_Y: self.Y_R = 0
-        if self.Y_G < EPS_Y: self.Y_G = 0
-        if self.Y_B < EPS_Y: self.Y_B = 0
-
-        print("xy", x_sum, y_sum)
-        #self.ax.plot(x_sum, y_sum, 'ro', markersize=3, color='black')
+        self.Y_B = self.Y_R * L_B 
         
+        self.Y_G = self.Y_R * L_G
+
+        self.Y_m = self.Y_R * self.converter.get_v_lambda(self.LAMBDA_M) / self.converter.get_v_lambda(self.LAMBDA_RED)
+
+        self.update_points_and_text_info()
+
+        abs_lambda = 7 # если монохроматический цвет близок к primaries то выставляем суммарную яркость на этот primaries и монохроматический цвет
+        
+        Y_sum = 40 * self.converter.get_v_lambda(self.LAMBDA_M)
+
+        for i in range(5):
+            if abs(self.LAMBDA_M - self.LAMBDA_RED)    < abs_lambda:
+                self.Y_m = Y_sum
+                self.Y_R = Y_sum
+                self.Y_G = 0
+                self.Y_B = 0
+
+            elif abs(self.LAMBDA_M - self.LAMBDA_GREEN) < abs_lambda:
+                self.Y_m = Y_sum
+                self.Y_R = 0
+                self.Y_G = Y_sum
+                self.Y_B = 0
+
+            elif abs(self.LAMBDA_M - self.LAMBDA_BLUE)  < abs_lambda:
+                self.Y_m = Y_sum
+                self.Y_R = 0
+                self.Y_G = 0
+                self.Y_B = Y_sum        
+
+            elif self.LAMBDA_M <= self.LAMBDA_BLUE or self.LAMBDA_M >= self.LAMBDA_RED:
+        
+                x_sum, y_sum = find_intersection(self.point_R, self.point_B, self.point_G, self.point_m)
+                Y_sum = self.update_Y_sum(x_sum, y_sum)
+
+                Y_R_B_ratio = get_Y_ratio(self.point_R, self.point_B, x_sum, y_sum)
+                Y_G_m_ratio = get_Y_ratio(self.point_G, self.point_m, x_sum, y_sum)
+            
+                self.Y_m = Y_sum / (1 + Y_G_m_ratio)
+                self.Y_G = self.Y_m * Y_G_m_ratio
+
+                self.Y_B = Y_sum / (1 + Y_R_B_ratio)
+                self.Y_R = self.Y_B * Y_R_B_ratio
+
+
+            elif self.LAMBDA_M <= self.LAMBDA_GREEN:
+        
+                x_sum, y_sum = find_intersection(self.point_B, self.point_G, self.point_R, self.point_m)
+                Y_sum = self.update_Y_sum(x_sum, y_sum)
+
+                Y_B_G_ratio = get_Y_ratio(self.point_B, self.point_G, x_sum, y_sum)
+                Y_R_m_ratio = get_Y_ratio(self.point_R, self.point_m, x_sum, y_sum)
+
+                self.Y_m = Y_sum / (1 + Y_R_m_ratio)
+                self.Y_R = self.Y_m * Y_R_m_ratio
+
+                self.Y_G = Y_sum / (1 + Y_B_G_ratio)
+                self.Y_B = self.Y_G * Y_B_G_ratio
+
+            elif self.LAMBDA_M <= self.LAMBDA_RED:
+
+                x_sum, y_sum = find_intersection(self.point_R, self.point_G, self.point_B, self.point_m)
+                Y_sum = self.update_Y_sum(x_sum, y_sum)
+
+                Y_R_G_ratio = get_Y_ratio(self.point_R, self.point_G, x_sum, y_sum)
+                Y_B_m_ratio = get_Y_ratio(self.point_B, self.point_m, x_sum, y_sum)
+
+                self.Y_m = Y_sum / (1 + Y_B_m_ratio)
+                self.Y_B = self.Y_m * Y_B_m_ratio
+
+                self.Y_G = Y_sum / (1 + Y_R_G_ratio)
+                self.Y_R = self.Y_G * Y_R_G_ratio
+
+
+            self.Y_R = round(self.Y_R, self.N_ROUND)   
+            self.Y_G = round(self.Y_G, self.N_ROUND)
+            self.Y_B = round(self.Y_B, self.N_ROUND)
+
+            eps_Y_R = EPS_INT * self.converter.get_v_lambda(self.LAMBDA_RED) 
+            eps_Y_G = EPS_INT * self.converter.get_v_lambda(self.LAMBDA_GREEN)
+            eps_Y_B = EPS_INT * self.converter.get_v_lambda(self.LAMBDA_BLUE)
+            eps_Y_m = EPS_INT * self.converter.get_v_lambda(self.LAMBDA_M)
+
+
+            if self.Y_R < eps_Y_R: self.Y_R = 0 #eps_Y_R
+            if self.Y_G < eps_Y_G: self.Y_G = 0 #eps_Y_G
+            if self.Y_B < eps_Y_B: self.Y_B = 0 #eps_Y_B
+            if self.Y_m < eps_Y_m: self.Y_m = 0 #eps_Y_m
+
+            self.update_points_and_text_info()
         
     def get_frequency_and_power_from_Y_wavelength(self, Y_s, wavelengths):
 
@@ -731,7 +683,6 @@ class Gamut():
 
 
     def update_spectral_visualizer(self):
-        #if not self.visualize_spectra: return
         
         I_R, I_G, I_B, I_m = self.get_intensities_from_Y()
 
@@ -748,7 +699,6 @@ class Gamut():
 
         self.spectra_line_M.set_data(wavelenghts, sd_mono.values)
 
-        #self.fig_spectra.canvas.draw_idle()
 
 
     def update_text_info(self, Y_sum1=None, Y_sum2=None):
@@ -778,15 +728,20 @@ class Gamut():
 
         print("start update points and text info")
 
+        is_error = False
+
         xy_m          = self.converter.wavelengths_to_xy(self.LAMBDA_M,     I_m)
         self.XY_RED   = self.converter.wavelengths_to_xy(self.LAMBDA_RED,   I_R)
         self.XY_GREEN = self.converter.wavelengths_to_xy(self.LAMBDA_GREEN, I_G)
         self.XY_BLUE  = self.converter.wavelengths_to_xy(self.LAMBDA_BLUE,  I_B)
 
-        self.point_m.update_point(xy_m)
-        self.point_R.update_point(self.XY_RED)
-        self.point_G.update_point(self.XY_GREEN)
-        self.point_B.update_point(self.XY_BLUE)
+        try:
+            self.point_m.update_point(xy_m)
+            self.point_R.update_point(self.XY_RED)
+            self.point_G.update_point(self.XY_GREEN)
+            self.point_B.update_point(self.XY_BLUE)
+        except:
+            is_error = True
 
 
         xy_sum1, xy_sum2, text1, text2, Y_sum1, Y_sum2 = self.get_sum_color_xy_and_Y()
@@ -795,6 +750,8 @@ class Gamut():
         self.point_sum_2.update_point(xy_sum2, text=text2)
 
         self.update_text_info(Y_sum1, Y_sum2)
+
+        return is_error
 
 
     def update_primaries_triangle(self):
@@ -810,29 +767,27 @@ class Gamut():
         self.line.set_data(x_coords, y_coords)
 
 
-
     def update_slider(self, Y_STEP):
-
-        #if self.visualize_spectra: return 
         
         self.Y_STEP = round(Y_STEP, self.N_ROUND)
         self.update_text_info()
 
 
-    def redraw_gamut(self):
-        self.update_points_and_text_info()
+    def redraw_gamut(self, prev_values = None):
+        is_error = self.update_points_and_text_info()
+
+        if is_error:
+            self.Y_R, self.Y_G, self.Y_B, self.Y_m, self.LAMBDA_M = prev_values
+            self.update_points_and_text_info()
+
         self.update_primaries_triangle()
         self.update_spectral_visualizer()
-        #self.update_color_patch()
         
-
         self.ax.relim()                     # Пересчитываем границы осей
         self.ax.autoscale_view()            # Применяем новые границы
         self.fig.canvas.draw_idle()         # Запрашиваем перерисовку [[7]]
 
-
-
-
+       
     def update_gamut(self, event):
 
         n_changed_channel = -1 # Номер измененного канала 0 - красный 1 - зеленый 2 - синий 3 - монохроматичный свет
@@ -840,6 +795,8 @@ class Gamut():
 
 
         is_changed = False
+
+        prev_values = [self.Y_R, self.Y_G, self.Y_B, self.Y_m, self.LAMBDA_M] # значения чтобы сделать бекап на случай ошибки
        
 
         if event.key == 'r':  # Обновляем данные
@@ -941,7 +898,6 @@ class Gamut():
                 self.update_Y_s()
 
 
-
         elif event.key == 'y':
             update_color_setter_mode = 1
 
@@ -955,7 +911,7 @@ class Gamut():
                 
         if is_changed:
 
-            self.redraw_gamut()
+            self.redraw_gamut(prev_values)
 
 
         return is_changed, n_changed_channel, update_color_setter_mode
