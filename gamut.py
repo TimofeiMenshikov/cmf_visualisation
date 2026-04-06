@@ -21,10 +21,10 @@ from ao_color_setter import AoColorSetterStatic
 from typing import Tuple, Optional, Union, List
 
 from constants import LAMBDA_RED, LAMBDA_GREEN, LAMBDA_BLUE, LAMBDA_M_START, Y_STEP_START
-
 from constants import L_R, L_G, L_B 
+from constants import EPS_INT
 
-from constants import EPS_INT, EPS_INT_R, EPS_INT_G, EPS_INT_B
+#from ui_constants import TEXT_INFO_X, 
 
 
 
@@ -289,8 +289,8 @@ class Gamut():
         # открытие ao_converter:
         dir_path = os.path.dirname(__file__)
      
-        calibration_path =   os.path.join(dir_path,   "ao", "calibration", "2026-03-10", "amplitude_intensity_calibration.csv")        
-        table_spectra_path = os.path.join(dir_path,   "ao", "calibration", "2026-03-10", "wv_intens_spectra")
+        calibration_path =   os.path.join(dir_path,   "ao", "calibration", "2026-02-04_median_without_IR", "amplitude_intensity_calibration.csv")        
+        table_spectra_path = os.path.join(dir_path,   "ao", "calibration", "2026-02-04_median_without_IR", "wv_intens_spectra")
 
         self.converter = SpectralConverterMOD(observer="1931_2", model="table", table_spectra_path=table_spectra_path)
         self.ao_converter = AoConverter(calibration_path, table_spectra_path=table_spectra_path)
@@ -344,10 +344,10 @@ class Gamut():
 
 
         # яркости для каждой из primaries и для монохроматической волны
-        self.Y_R = 200
-        self.Y_G = 50
-        self.Y_B = 10
-        self.Y_m = 20
+        self.Y_R = 1
+        self.Y_G = 1
+        self.Y_B = 1
+        self.Y_m = 1
         # шаг изменения яркости
         self.Y_STEP = Y_STEP_START
 
@@ -560,12 +560,12 @@ class Gamut():
         return xy_sum1, xy_sum2, text1, text2, Y_sum1, Y_sum2
     
 
-    def update_Y_sum(self, x_sum = None, y_sum = None):
+    def update_Y_sum(self, x_sum, y_sum):
 
         print("start update_Y_sum")
 
         #Y_sum = find_max_Y((x_sum, y_sum), self.ao_converter) / 2
-        Y_sum = 300 * self.converter.get_v_lambda(self.LAMBDA_M)
+        Y_sum = 80 * self.converter.get_v_lambda(self.LAMBDA_M)
 
         return Y_sum
 
@@ -584,7 +584,7 @@ class Gamut():
 
         abs_lambda = 7 # если монохроматический цвет близок к primaries то выставляем суммарную яркость на этот primaries и монохроматический цвет
         
-        Y_sum = self.update_Y_sum()
+        Y_sum = 20 * self.converter.get_v_lambda(self.LAMBDA_M)
 
         for i in range(5):
             if abs(self.LAMBDA_M - self.LAMBDA_RED)    < abs_lambda:
@@ -653,16 +653,16 @@ class Gamut():
             self.Y_G = round(self.Y_G, self.N_ROUND)
             self.Y_B = round(self.Y_B, self.N_ROUND)
 
-            eps_Y_R = EPS_INT_R * self.converter.get_v_lambda(self.LAMBDA_RED) 
-            eps_Y_G = EPS_INT_G * self.converter.get_v_lambda(self.LAMBDA_GREEN)
-            eps_Y_B = EPS_INT_B * self.converter.get_v_lambda(self.LAMBDA_BLUE)
+            eps_Y_R = EPS_INT * self.converter.get_v_lambda(self.LAMBDA_RED) 
+            eps_Y_G = EPS_INT * self.converter.get_v_lambda(self.LAMBDA_GREEN)
+            eps_Y_B = EPS_INT * self.converter.get_v_lambda(self.LAMBDA_BLUE)
             eps_Y_m = EPS_INT * self.converter.get_v_lambda(self.LAMBDA_M)
 
 
-            if self.Y_R < eps_Y_R: self.Y_R = eps_Y_R #eps_Y_R
-            if self.Y_G < eps_Y_G: self.Y_G = eps_Y_G #eps_Y_G
-            if self.Y_B < eps_Y_B: self.Y_B = eps_Y_B #eps_Y_B
-            if self.Y_m < eps_Y_m: self.Y_m = eps_Y_m #eps_Y_m
+            if self.Y_R < eps_Y_R: self.Y_R = 0 #eps_Y_R
+            if self.Y_G < eps_Y_G: self.Y_G = 0 #eps_Y_G
+            if self.Y_B < eps_Y_B: self.Y_B = 0 #eps_Y_B
+            if self.Y_m < eps_Y_m: self.Y_m = 0 #eps_Y_m
 
             self.update_points_and_text_info()
         
@@ -797,11 +797,6 @@ class Gamut():
         is_changed = False
 
         prev_values = [self.Y_R, self.Y_G, self.Y_B, self.Y_m, self.LAMBDA_M] # значения чтобы сделать бекап на случай ошибки
-
-        eps_Y_R = EPS_INT_R * self.converter.get_v_lambda(self.LAMBDA_RED) 
-        eps_Y_G = EPS_INT_G * self.converter.get_v_lambda(self.LAMBDA_GREEN)
-        eps_Y_B = EPS_INT_B * self.converter.get_v_lambda(self.LAMBDA_BLUE)
-        eps_Y_m = EPS_INT * self.converter.get_v_lambda(self.LAMBDA_M)
        
 
         if event.key == 'r':  # Обновляем данные
@@ -816,9 +811,6 @@ class Gamut():
 
             self.Y_R -= self.Y_STEP
             self.Y_R = round(self.Y_R, self.N_ROUND)
-
-            if self.Y_R < eps_Y_R:
-                self.Y_R = 0
 
             if self.Y_R < 0: self.Y_R = 0
             else:       
@@ -887,7 +879,7 @@ class Gamut():
             
             if self.LAMBDA_M > 780: self.LAMBDA_M = 780
             else:           
-                #Point(self.ax, self.point_m.xy, "",  legend = 'mono', color = 'blue')        
+                Point(self.ax, self.point_m.xy, "",  legend = 'mono', color = 'blue')        
                 is_changed = True
                 n_changed_channel = 3
                 self.update_Y_s()
@@ -923,3 +915,4 @@ class Gamut():
 
 
         return is_changed, n_changed_channel, update_color_setter_mode
+

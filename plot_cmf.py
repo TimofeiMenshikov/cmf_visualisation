@@ -99,11 +99,6 @@ class Plot():
 
     def __init__(self, data, show_trackbars = True):
 
-        # Значения для Primaries CIE 1931
-        # self.L_R = 1
-        # self.L_G = 4.5907
-        # self.L_B = 0.0601 
-
         # Значения для Primaries, которые использовались в нашем опыте 
         self.L_R = L_R
         self.L_G = L_G
@@ -116,14 +111,12 @@ class Plot():
         self.ymin = -0.1
         self.ymax =  1
 
-
         self.data = data
 
         append_primaries_lambda_to_data(data)
 
         self.data.sort(key = lambda x: x[0])
         self.get_real_data()
-        print(data)
         self.wavelength = [row[0] for row in self.data]
 
         self.V_lambda_dict = self.get_V_lambda_dict()
@@ -142,7 +135,7 @@ class Plot():
 
         V_lambda_dict = dict(zip(wavelengths, V_lambda))
 
-        #print(V_lambda_dict)
+        print(V_lambda_dict)
 
         return V_lambda_dict
     
@@ -160,7 +153,7 @@ class Plot():
 
         normed_R = self.norm_y(R, self.wavelength)
         normed_G = self.norm_y(G, self.wavelength)
-        normed_B = self.norm_y(B, self.wavelength, k = 1.5)
+        normed_B = self.norm_y(B, self.wavelength, k = 5)
 
         return normed_R, normed_G, normed_B
         
@@ -208,13 +201,13 @@ class Plot():
 
     def norm_int(self, int_r, int_g, int_b, int_m, lam): 
 
-        sum_int = (int_r + int_g + int_b) * int_m
+        if int_r == 0 and int_g == 0 and int_b == 0: return 0, 0, 0
+        if int_m == 0:                               return 0, 0, 0
 
-        if sum_int == 0: return 0, 0, 0
-
-        int_r /= sum_int
-        int_g /= sum_int
-        int_b /= sum_int
+            
+        int_r /= int_m
+        int_g /= int_m
+        int_b /= int_m
 
         L = int_r * self.L_R + int_g * self.L_G + int_b * self.L_B
 
@@ -341,3 +334,4 @@ if __name__ == "__main__":
 
     
     plot.show_plot()
+
