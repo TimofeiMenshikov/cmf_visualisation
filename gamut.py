@@ -2,7 +2,7 @@ import colour
 import matplotlib.pyplot as plt
 import matplotlib
 
-from scripts.render_max_xyY_aoc import find_max_Y
+#from scripts.render_max_xyY_aoc import find_max_Y
 
 import numpy as np
 import os
@@ -286,14 +286,13 @@ class Gamut():
     def __init__(self, visualize_spectra = True, visualize_legend = False, full_screen = False):
         
         
-        # открытие ao_converter:
-        dir_path = os.path.dirname(__file__)
+        from constants import CALIBRATION_PATH, TABLE_SPECTRA_PATH
      
-        calibration_path =   os.path.join(dir_path,   "ao", "calibration", "2026-02-04_median_without_IR", "amplitude_intensity_calibration.csv")        
-        table_spectra_path = os.path.join(dir_path,   "ao", "calibration", "2026-02-04_median_without_IR", "wv_intens_spectra")
+        # calibration_path =   os.path.join(dir_path, "..", "ao-system",   "ao", "calibration", "2026-03-23", "amplitude_intensity_calibration.csv")        
+        # table_spectra_path = os.path.join(dir_path, "..", "ao-system",    "ao", "calibration", "2026-03-23", "wv_intens_spectra")
 
-        self.converter = SpectralConverterMOD(observer="1931_2", model="table", table_spectra_path=table_spectra_path)
-        self.ao_converter = AoConverter(calibration_path, table_spectra_path=table_spectra_path)
+        self.converter = SpectralConverterMOD(observer="1931_2", model="table", table_spectra_path=TABLE_SPECTRA_PATH)
+        self.ao_converter = AoConverter(CALIBRATION_PATH, table_spectra_path=TABLE_SPECTRA_PATH)
 
         self.visualize_spectra = visualize_spectra
 
@@ -341,13 +340,13 @@ class Gamut():
         plt.rcParams['xtick.labelsize'] = 12
         plt.rcParams['ytick.labelsize'] = 12
 
-
+        from constants import Y_R_START, Y_G_START, Y_B_START, Y_M_START
 
         # яркости для каждой из primaries и для монохроматической волны
-        self.Y_R = 1
-        self.Y_G = 1
-        self.Y_B = 1
-        self.Y_m = 1
+        self.Y_R = Y_R_START
+        self.Y_G = Y_G_START
+        self.Y_B = Y_B_START
+        self.Y_m = Y_M_START
         # шаг изменения яркости
         self.Y_STEP = Y_STEP_START
 
@@ -572,7 +571,7 @@ class Gamut():
 
     def update_Y_s(self): # при изменении длины волны меняет яркости primaries, считая яркость монохроматической волны фиксированной
         
-        self.Y_R = 15
+        self.Y_R = 5
 
         self.Y_B = self.Y_R * L_B 
         
@@ -584,7 +583,7 @@ class Gamut():
 
         abs_lambda = 7 # если монохроматический цвет близок к primaries то выставляем суммарную яркость на этот primaries и монохроматический цвет
         
-        Y_sum = 20 * self.converter.get_v_lambda(self.LAMBDA_M)
+        Y_sum = 80 * self.converter.get_v_lambda(self.LAMBDA_M)
 
         for i in range(5):
             if abs(self.LAMBDA_M - self.LAMBDA_RED)    < abs_lambda:
@@ -915,4 +914,3 @@ class Gamut():
 
 
         return is_changed, n_changed_channel, update_color_setter_mode
-

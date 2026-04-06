@@ -3,6 +3,12 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 import os
+from pathlib import Path
+
+current_dir = Path(__file__).resolve().parent
+
+target_dir = current_dir.parent / "ao-system"
+os.chdir(target_dir)
 
 from matplotlib.widgets import Button, Slider, TextBox
 from ao.ao_device import AoDevice, Channel
