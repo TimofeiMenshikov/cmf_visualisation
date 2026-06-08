@@ -1,0 +1,9 @@
+20:24:51.992266, 24 05 26, AA 00 A3 96, preamp turned off
+20:24:51.993089, 24 05 26, AA 03 A5 01 32 C8 4A, set channel 1 freq None->130
+20:24:51.993191, 24 05 26, AA 03 A7 01 00 00 D8, set channel 1 amplitude None->0
+20:24:51.993271, 24 05 26, AA 03 A5 02 32 C8 80, set channel 2 freq None->130
+20:24:51.993343, 24 05 26, AA 03 A7 02 00 00 12, set channel 2 amplitude None->0
+20:24:51.993409, 24 05 26, AA 03 A5 03 32 C8 C6, set channel 3 freq None->130
+20:24:51.993475, 24 05 26, AA 03 A7 03 00 00 54, set channel 3 amplitude None->0
+20:24:51.993542, 24 05 26, AA 03 A5 04 32 C8 25, set channel 4 freq None->130
+20:24:51.993606, 24 05 26, AA 03 A7 04 00 00 B7, set channel 4 amplitude None->0

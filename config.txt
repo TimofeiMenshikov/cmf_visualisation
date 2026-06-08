@@ -1,0 +1,12 @@
+# XYZ gamut interactive controls
+shift_line_XY = -0.0151654412
+shift_line_YZ = 0.0813419118
+shift_line_XZ = 0.0000000000
+rotate_line_XY = 1.5923713235
+rotate_line_YZ = -15.3653492647
+rotate_line_XZ = -1.3028492647
+
+# Current M_xyz_to_rgb
+M_xyz_to_rgb_row = 1.8276490760 -0.2354419252 -0.2102925647
+M_xyz_to_rgb_row = -0.8300620963 1.1861856882 -0.0101585892
+M_xyz_to_rgb_row = 0.0024130204 0.0492562370 1.2204511539
