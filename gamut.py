@@ -37,7 +37,7 @@ from ao_color_setter import AoColorSetterStatic
 
 from typing import Tuple, Optional, Union, List
 
-from constants import LAMBDA_RED, LAMBDA_GREEN, LAMBDA_BLUE, LAMBDA_M_START, Y_STEP_START
+from constants import LAMBDA_RED, LAMBDA_GREEN, LAMBDA_BLUE, LAMBDA_M_START, Y_STEP_START, CALIBRATION_WAVELENGTH_RANGE
 from constants import L_R, L_G, L_B 
 from constants import EPS_INT
 from ui_constants import (
@@ -514,6 +514,7 @@ class Gamut():
         # шаг изменения яркости
         self.Y_STEP = Y_STEP_START
         self.Y_scale_coeff = 1.2
+        # Use 90% of the maximum usable summed luminance
         self.Y_MAX_USAGE_COEFF = 0.9
 
         # длины волн для primaries - не меняются, для монохроматичной волны - меняются
@@ -522,6 +523,7 @@ class Gamut():
         self.LAMBDA_BLUE  = LAMBDA_BLUE
 
         self.LAMBDA_M     = LAMBDA_M_START
+        self.MIN_LAMBDA, self.MAX_LAMBDA = CALIBRATION_WAVELENGTH_RANGE
 
         self.N_ROUND = 4 # округление значений для того, чтобы Y корректно суммировался с Y_STEP
 
@@ -1360,7 +1362,7 @@ class Gamut():
             if self.LAMBDA_M in [self.LAMBDA_RED, self.LAMBDA_GREEN, self.LAMBDA_BLUE]: # чтобы длина монохроматической волны не была равна primaires
                 self.LAMBDA_M += 1
             
-            if self.LAMBDA_M > 780: self.LAMBDA_M = 780
+            if self.LAMBDA_M > self.MAX_LAMBDA: self.LAMBDA_M = self.MAX_LAMBDA
             else:           
                 Point(self.ax, self.point_m.xy, "",  legend = 'mono', color = 'blue')        
                 is_changed = True
@@ -1374,17 +1376,17 @@ class Gamut():
             if self.LAMBDA_M in [self.LAMBDA_RED, self.LAMBDA_GREEN, self.LAMBDA_BLUE]: # чтобы длина монохроматической волны не была равна primaires
                 self.LAMBDA_M -= 1
 
-            if self.LAMBDA_M < 380: self.LAMBDA_M = 380
+            if self.LAMBDA_M < self.MIN_LAMBDA: self.LAMBDA_M = self.MIN_LAMBDA
             else:                   
                 is_changed = True
                 n_changed_channel = 3
                 self.update_Y_s()
 
 
-        elif event.key == 'y':
+        elif event.key in ('y', '1'):
             update_color_setter_mode = 1
 
-        elif event.key == 'Y':
+        elif event.key in ('Y', 'shift+y', '2'):
             update_color_setter_mode = 2
 
         

@@ -21,9 +21,10 @@ if str(target_dir) not in sys.path:
 
 from matplotlib.widgets import Button, Slider, TextBox
 from ao.ao_device import AoDevice, Channel
-from ao_color_setter import AoColorSetter, AoColorSetterStatic
+from ao_color_setter import AoColorSetter
 from ui_constants import TEXT_BOX_COORDINATES, PANEL_BG, PANEL_EDGE, TEXT_COLOR, MUTED_TEXT
 from gamut import Gamut
+from constants import CALIBRATION_NAME, CALIBRATION_WAVELENGTH_RANGE
 
 BUTTON_COLOR = "#2563eb"
 BUTTON_HOVER_COLOR = "#1d4ed8"
@@ -37,22 +38,23 @@ class AoDeviceExperiment():
         self.DATA_FILENAME = current_dir / "data.txt"
         self.IS_SAVED_DATA = False
 
-        self.MIN_LAMBDA = 443.4
-        self.MAX_LAMBDA = 743.6
+        self.MIN_LAMBDA, self.MAX_LAMBDA = CALIBRATION_WAVELENGTH_RANGE
 
         if logger is None:
             self.ao = AoDevice(read_output=read_output, simulate=simulate)
         else:
             self.ao = AoDevice(read_output=read_output, simulate=simulate, logger=logger)
 
-        #self.ao_color_setter = AoColorSetter(self.ao, self.get_frequency_and_power)
-        self.ao_color_setter_static = AoColorSetterStatic(self.ao, self.get_frequency_and_power)
+        self.ao_color_setter = AoColorSetter(self.ao, self.get_frequency_and_power, period=1.5)
 
 
         self.visualize_spectra = visualize_spectra
         self.gamut = Gamut(visualize_spectra=self.visualize_spectra)
+        print(f"calibration: {CALIBRATION_NAME}, lambda range: {self.MIN_LAMBDA:g}-{self.MAX_LAMBDA:g} nm")
 
+        self._shutdown_started = False
         self.gamut.fig.canvas.mpl_connect('key_press_event', self.handle_key_press)
+        self.gamut.fig.canvas.mpl_connect('close_event', self.safe_shutdown)
 
         self.textbox, self.textbox_info_text = self.__init_text_box()
         (
@@ -69,13 +71,27 @@ class AoDeviceExperiment():
         plt.show()
 
 
-    def start_experiment(self):
-        self.ao.find_device()
-        #self.start_ao_device()
-        print(self.ao.is_connected)
+    def safe_shutdown(self, event=None):
+        if self._shutdown_started:
+            return
 
-        #self.ao_color_setter.start()
-        self.ao_color_setter_static.start()
+        self._shutdown_started = True
+        try:
+            self.ao_color_setter.stop()
+            if self.ao.is_connected():
+                self.ao.turn_off_preamp()
+        except Exception as exc:
+            print(f"AO safe shutdown failed: {exc}")
+
+
+    def start_experiment(self):
+        port = self.ao.find_device()
+        print(f"ao connected: {self.ao.is_connected()}, port: {port}")
+
+        if self.ao.is_connected():
+            self.ao.turn_on_preamp()
+
+        self.ao_color_setter.start()
 
 
     def __init_text_box(self):                        # текстовое поле - аналог нажатия клавишами поэтому его инициализация находится вне гамута
@@ -332,10 +348,14 @@ class AoDeviceExperiment():
             self.__sync_metrics_button_label()
             self.dump_info()
 
-        elif update_color_setter_mode == 1:
-            self.ao_color_setter_static.set_mode_1()
-        elif update_color_setter_mode == 2:
-            self.ao_color_setter_static.set_mode_2()
+        elif update_color_setter_mode in (1, 2):
+            if update_color_setter_mode == 1:
+                self.ao_color_setter.set_mode_1()
+            else:
+                self.ao_color_setter.set_mode_2()
+
+            if self.textbox_info_text is not None:
+                self.textbox_info_text.set_text("2 colors active")
 
 
     def get_frequency_and_power(self): # получает значения частоты и мощности из параметров яркости и длин волн
@@ -364,8 +384,7 @@ class AoDeviceExperiment():
 
         frequencies, powers = self.get_frequency_and_power()
 
-        #self.ao_color_setter.update(frequencies, powers)
-        self.ao_color_setter_static.update(frequencies, powers)
+        self.ao_color_setter.update(frequencies, powers)
 
         #self.ao._send_single_channel_if_changed(n_channel, Channel(frequencies[n_channel], powers[n_channel]))
 
@@ -375,7 +394,7 @@ class AoDeviceExperiment():
     def update_ao_device_all(self):
 
         frequencies, powers = self.get_frequency_and_power()
-        self.ao_color_setter_static.update(frequencies, powers)
+        self.ao_color_setter.update(frequencies, powers)
 
         print("обновлены все каналы")
         print(frequencies, powers)
@@ -390,7 +409,7 @@ class AoDeviceExperiment():
             
 def main():
 
-    ao_experiment = AoDeviceExperiment(read_output=True, simulate=True)
+    ao_experiment = AoDeviceExperiment(read_output=True, simulate=False)
     
 
 if __name__ == "__main__":
