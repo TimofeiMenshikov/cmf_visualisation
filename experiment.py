@@ -55,7 +55,14 @@ class AoDeviceExperiment():
         self.gamut.fig.canvas.mpl_connect('key_press_event', self.handle_key_press)
 
         self.textbox, self.textbox_info_text = self.__init_text_box()
-        self.save_button, self.reset_button, self.show_cmf_button, self.show_metrics_button = self.__init_button()
+        (
+            self.save_button,
+            self.reset_button,
+            self.show_cmf_button,
+            self.show_metrics_button,
+            self.scale_up_button,
+            self.scale_down_button,
+        ) = self.__init_button()
 
         self.start_experiment()
 
@@ -113,19 +120,23 @@ class AoDeviceExperiment():
         ax_metrics_button = plt.axes([0.715, 0.585, 0.115, 0.04], facecolor=BUTTON_COLOR)
         ax_save_button = plt.axes([0.845, 0.585, 0.06, 0.04], facecolor=BUTTON_COLOR)
         ax_reset_button = plt.axes([0.92, 0.585, 0.065, 0.04], facecolor=RESET_COLOR)
+        ax_scale_up_button = plt.axes([0.60, 0.525, 0.04, 0.035], facecolor=BUTTON_COLOR)
+        ax_scale_down_button = plt.axes([0.615, 0.485, 0.04, 0.035], facecolor=RESET_COLOR)
     
 
         show_cmf_button = Button(ax_cmf_button, 'Show CMF', color=BUTTON_COLOR, hovercolor=BUTTON_HOVER_COLOR)
         show_metrics_button = Button(ax_metrics_button, 'show_metrics', color=BUTTON_COLOR, hovercolor=BUTTON_HOVER_COLOR)
         save_button = Button(ax_save_button, 'Save', color=BUTTON_COLOR, hovercolor=BUTTON_HOVER_COLOR)
         reset_button = Button(ax_reset_button, 'Reset', color=RESET_COLOR, hovercolor=RESET_HOVER_COLOR)
+        scale_up_button = Button(ax_scale_up_button, 'Y+', color=BUTTON_COLOR, hovercolor=BUTTON_HOVER_COLOR)
+        scale_down_button = Button(ax_scale_down_button, 'Y-', color=RESET_COLOR, hovercolor=RESET_HOVER_COLOR)
 
-        for button in (show_cmf_button, show_metrics_button, save_button, reset_button):
+        for button in (show_cmf_button, show_metrics_button, save_button, reset_button, scale_up_button, scale_down_button):
             button.label.set_fontsize(10)
             button.label.set_color("white")
             button.label.set_fontweight("bold")
 
-        for ax_button in (ax_cmf_button, ax_metrics_button, ax_save_button, ax_reset_button):
+        for ax_button in (ax_cmf_button, ax_metrics_button, ax_save_button, ax_reset_button, ax_scale_up_button, ax_scale_down_button):
             for spine in ax_button.spines.values():
                 spine.set_visible(False)
 
@@ -134,8 +145,24 @@ class AoDeviceExperiment():
         show_metrics_button.on_clicked(self.show_metrics)
         save_button.on_clicked(self.save_to_file)
         reset_button.on_clicked(self.reset_experiment)
+        scale_up_button.on_clicked(self.scale_luminances_up)
+        scale_down_button.on_clicked(self.scale_luminances_down)
 
-        return save_button, reset_button, show_cmf_button, show_metrics_button
+        return save_button, reset_button, show_cmf_button, show_metrics_button, scale_up_button, scale_down_button
+
+    def scale_luminances_up(self, event):
+        if self.gamut.scale_luminances(self.gamut.Y_scale_coeff):
+            self.IS_SAVED_DATA = False
+            self.update_ao_device_all()
+            self.__sync_metrics_button_label()
+            self.dump_info()
+
+    def scale_luminances_down(self, event):
+        if self.gamut.scale_luminances(1 / self.gamut.Y_scale_coeff):
+            self.IS_SAVED_DATA = False
+            self.update_ao_device_all()
+            self.__sync_metrics_button_label()
+            self.dump_info()
 
     def show_cmf(self, event):
         if self.gamut.ax2_mode == "cmf":
@@ -343,6 +370,15 @@ class AoDeviceExperiment():
         #self.ao._send_single_channel_if_changed(n_channel, Channel(frequencies[n_channel], powers[n_channel]))
 
         print(f"выставлен канал {n_channel}, {frequencies[n_channel]} {powers[n_channel]}")
+
+
+    def update_ao_device_all(self):
+
+        frequencies, powers = self.get_frequency_and_power()
+        self.ao_color_setter_static.update(frequencies, powers)
+
+        print("обновлены все каналы")
+        print(frequencies, powers)
 
 
     def dump_info(self):

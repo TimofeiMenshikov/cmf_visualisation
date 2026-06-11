@@ -220,6 +220,17 @@ def find_intersection(p1: Point, p2: Point, p3: Point, p4: Point):
     return (x, y)
 
 
+def find_intersection_or_midpoint(p1: Point, p2: Point, p3: Point, p4: Point):
+    intersection = find_intersection(p1, p2, p3, p4)
+
+    if isinstance(intersection, tuple) and len(intersection) == 2:
+        return intersection
+
+    x1, y1 = p1.xy
+    x2, y2 = p2.xy
+    return (0.5 * (x1 + x2), 0.5 * (y1 + y2))
+
+
 def get_Y_ratio(point1, point2, x_sum, y_sum): # функция для получения соотношения яркостей от координат xy в пространстве цветности
     x1, y1 = point1.xy
     x2, y2 = point2.xy
@@ -272,6 +283,17 @@ class SpectralConverterMOD(SpectralConverter): # добавлен метод д�
         self.V_LAMBDA    = CMF.values[:, 1]
     
         self.K_M = 683.0 / 1000 # лм/Вт
+
+
+    def _clip_table_wavelength(self, wavelength):
+        if self.model != "table" or not hasattr(self, "wvs") or len(self.wvs) == 0:
+            return wavelength
+
+        return float(np.clip(wavelength, min(self.wvs), max(self.wvs)))
+
+
+    def _table_sd(self, wv, intensity=1.0):
+        return super()._table_sd(self._clip_table_wavelength(wv), intensity)
 
 
     def get_v_lambda(self, wavelength):
@@ -491,6 +513,8 @@ class Gamut():
         self.Y_m = Y_M_START
         # шаг изменения яркости
         self.Y_STEP = Y_STEP_START
+        self.Y_scale_coeff = 1.2
+        self.Y_MAX_USAGE_COEFF = 0.9
 
         # длины волн для primaries - не меняются, для монохроматичной волны - меняются
         self.LAMBDA_RED   = LAMBDA_RED
@@ -519,7 +543,8 @@ class Gamut():
                 fontsize=14
             )        
 
-        self.slider =  self.__init_slider()
+        self.slider = self.__init_slider()
+        self.scale_slider = self.__init_scale_slider()
 
         self.__init_spectral_visualizer()
 
@@ -730,6 +755,31 @@ class Gamut():
         return slider
 
 
+    def __init_scale_slider(self):
+
+        slider_ax = plt.axes([0.66, 0.495, 0.25, 0.025], facecolor=PANEL_BG)
+        slider = Slider(
+            slider_ax,
+            'Y_scale_coeff',
+            1.01,
+            2,
+            valinit=self.Y_scale_coeff,
+            valstep=0.01,
+            color="#0f766e",
+            track_color="#ccfbf1",
+            handle_style={"facecolor": "#0f766e", "edgecolor": "white", "size": 9},
+        )
+        slider.label.set_fontsize(10)
+        slider.label.set_color(MUTED_TEXT)
+        slider.valtext.set_fontsize(10)
+        slider.valtext.set_color(TEXT_COLOR)
+        for spine in slider_ax.spines.values():
+            spine.set_color(PANEL_EDGE)
+        slider.on_changed(self.update_scale_slider)
+
+        return slider
+
+
     def __init_points_and_text_info(self):
         """
         1) получение координат xy для primaries и стартовых координат для монохроматичной волны
@@ -793,7 +843,7 @@ class Gamut():
         text_info_1 = self.ax3.text(0.04, 0.72, f'lambda_m = {self.LAMBDA_M} nm', **text_kwargs)
         text_info_2 = self.ax3.text(0.04, 0.56, f'Y_R = {self.Y_R}, Y_B = {self.Y_B}, Y_G = {self.Y_G}, Y_m = {self.Y_m}', **text_kwargs)
         text_info_3 = self.ax3.text(0.04, 0.4, f'Y_sum1 = {round(Y_sum1, self.N_ROUND)} Y_sum2 = {round(Y_sum2, self.N_ROUND)}', **text_kwargs)
-        text_info_4 = self.ax3.text(0.04, 0.24, f'Y_step = {self.Y_STEP}', **text_kwargs)
+        text_info_4 = self.ax3.text(0.04, 0.24, f'Y_step = {self.Y_STEP}, Y_scale = {self.Y_scale_coeff}', **text_kwargs)
 
         I_R, I_G, I_B, I_m = self.get_intensities_from_Y()
 
@@ -852,6 +902,57 @@ class Gamut():
         return Y_sum
 
 
+    def get_max_intensity_for_wavelength(self, wavelength):
+        spectra_table = getattr(self.converter, "spectra_table", None)
+        if not spectra_table:
+            return np.inf
+
+        table_wavelengths = np.array(
+            sorted(float(wv) for wv in spectra_table.keys() if not isinstance(wv, str)),
+            dtype=float,
+        )
+        if len(table_wavelengths) == 0:
+            return np.inf
+
+        idx = np.searchsorted(table_wavelengths, wavelength)
+        if idx <= 0:
+            candidate_wavelengths = [table_wavelengths[0]]
+        elif idx >= len(table_wavelengths):
+            candidate_wavelengths = [table_wavelengths[-1]]
+        elif np.isclose(table_wavelengths[idx], wavelength):
+            candidate_wavelengths = [table_wavelengths[idx]]
+        else:
+            candidate_wavelengths = [table_wavelengths[idx - 1], table_wavelengths[idx]]
+
+        max_intensities = []
+        for candidate_wavelength in candidate_wavelengths:
+            max_intensities.append(np.max(spectra_table[np.float64(candidate_wavelength)][0]))
+
+        return float(min(max_intensities))
+
+
+    def get_max_Y_for_wavelength(self, wavelength):
+        max_intensity = self.get_max_intensity_for_wavelength(wavelength)
+        return max_intensity * self.converter.get_v_lambda(wavelength) * self.converter.K_M
+
+
+    def get_Y_sum_close_to_max(self, channel_fractions):
+        max_Y_sum = np.inf
+        eps = 1e-10
+
+        for fraction, wavelength in channel_fractions:
+            if fraction <= eps:
+                continue
+
+            max_channel_Y = self.get_max_Y_for_wavelength(wavelength)
+            max_Y_sum = min(max_Y_sum, max_channel_Y / fraction)
+
+        if not np.isfinite(max_Y_sum):
+            return 0
+
+        return max_Y_sum * self.Y_MAX_USAGE_COEFF
+
+
     def update_Y_s(self): # при изменении длины волны меняет яркости primaries, считая яркость монохроматической волны фиксированной
         
         self.Y_R = 5
@@ -866,22 +967,32 @@ class Gamut():
 
         abs_lambda = 7 # если монохроматический цвет близок к primaries то выставляем суммарную яркость на этот primaries и монохроматический цвет
         
-        Y_sum = 80 * self.converter.get_v_lambda(self.LAMBDA_M)
-
         for i in range(5):
             if abs(self.LAMBDA_M - self.LAMBDA_RED)    < abs_lambda:
+                Y_sum = self.get_Y_sum_close_to_max([
+                    (1, self.LAMBDA_M),
+                    (1, self.LAMBDA_RED),
+                ])
                 self.Y_m = Y_sum
                 self.Y_R = Y_sum
                 self.Y_G = 0
                 self.Y_B = 0
 
             elif abs(self.LAMBDA_M - self.LAMBDA_GREEN) < abs_lambda:
+                Y_sum = self.get_Y_sum_close_to_max([
+                    (1, self.LAMBDA_M),
+                    (1, self.LAMBDA_GREEN),
+                ])
                 self.Y_m = Y_sum
                 self.Y_R = 0
                 self.Y_G = Y_sum
                 self.Y_B = 0
 
             elif abs(self.LAMBDA_M - self.LAMBDA_BLUE)  < abs_lambda:
+                Y_sum = self.get_Y_sum_close_to_max([
+                    (1, self.LAMBDA_M),
+                    (1, self.LAMBDA_BLUE),
+                ])
                 self.Y_m = Y_sum
                 self.Y_R = 0
                 self.Y_G = 0
@@ -889,33 +1000,64 @@ class Gamut():
 
             elif self.LAMBDA_M <= self.LAMBDA_BLUE or self.LAMBDA_M >= self.LAMBDA_RED:
         
-                x_sum, y_sum = find_intersection(self.point_R, self.point_B, self.point_G, self.point_m)
-                Y_sum = self.update_Y_sum(x_sum, y_sum)
+                x_sum, y_sum = find_intersection_or_midpoint(self.point_R, self.point_B, self.point_G, self.point_m)
 
-                self.Y_R, self.Y_B = split_Y_between_points(self.point_R, self.point_B, x_sum, y_sum, Y_sum)
-                self.Y_G, self.Y_m = split_Y_between_points(self.point_G, self.point_m, x_sum, y_sum, Y_sum)
+                Y_R_fraction, Y_B_fraction = split_Y_between_points(self.point_R, self.point_B, x_sum, y_sum, 1)
+                Y_G_fraction, Y_m_fraction = split_Y_between_points(self.point_G, self.point_m, x_sum, y_sum, 1)
+                Y_sum = self.get_Y_sum_close_to_max([
+                    (Y_R_fraction, self.LAMBDA_RED),
+                    (Y_B_fraction, self.LAMBDA_BLUE),
+                    (Y_G_fraction, self.LAMBDA_GREEN),
+                    (Y_m_fraction, self.LAMBDA_M),
+                ])
+
+                self.Y_R = Y_R_fraction * Y_sum
+                self.Y_B = Y_B_fraction * Y_sum
+                self.Y_G = Y_G_fraction * Y_sum
+                self.Y_m = Y_m_fraction * Y_sum
 
 
             elif self.LAMBDA_M <= self.LAMBDA_GREEN:
         
-                x_sum, y_sum = find_intersection(self.point_B, self.point_G, self.point_R, self.point_m)
-                Y_sum = self.update_Y_sum(x_sum, y_sum)
+                x_sum, y_sum = find_intersection_or_midpoint(self.point_B, self.point_G, self.point_R, self.point_m)
 
-                self.Y_B, self.Y_G = split_Y_between_points(self.point_B, self.point_G, x_sum, y_sum, Y_sum)
-                self.Y_R, self.Y_m = split_Y_between_points(self.point_R, self.point_m, x_sum, y_sum, Y_sum)
+                Y_B_fraction, Y_G_fraction = split_Y_between_points(self.point_B, self.point_G, x_sum, y_sum, 1)
+                Y_R_fraction, Y_m_fraction = split_Y_between_points(self.point_R, self.point_m, x_sum, y_sum, 1)
+                Y_sum = self.get_Y_sum_close_to_max([
+                    (Y_B_fraction, self.LAMBDA_BLUE),
+                    (Y_G_fraction, self.LAMBDA_GREEN),
+                    (Y_R_fraction, self.LAMBDA_RED),
+                    (Y_m_fraction, self.LAMBDA_M),
+                ])
+
+                self.Y_B = Y_B_fraction * Y_sum
+                self.Y_G = Y_G_fraction * Y_sum
+                self.Y_R = Y_R_fraction * Y_sum
+                self.Y_m = Y_m_fraction * Y_sum
 
             elif self.LAMBDA_M <= self.LAMBDA_RED:
 
-                x_sum, y_sum = find_intersection(self.point_R, self.point_G, self.point_B, self.point_m)
-                Y_sum = self.update_Y_sum(x_sum, y_sum)
+                x_sum, y_sum = find_intersection_or_midpoint(self.point_R, self.point_G, self.point_B, self.point_m)
 
-                self.Y_R, self.Y_G = split_Y_between_points(self.point_R, self.point_G, x_sum, y_sum, Y_sum)
-                self.Y_B, self.Y_m = split_Y_between_points(self.point_B, self.point_m, x_sum, y_sum, Y_sum)
+                Y_R_fraction, Y_G_fraction = split_Y_between_points(self.point_R, self.point_G, x_sum, y_sum, 1)
+                Y_B_fraction, Y_m_fraction = split_Y_between_points(self.point_B, self.point_m, x_sum, y_sum, 1)
+                Y_sum = self.get_Y_sum_close_to_max([
+                    (Y_R_fraction, self.LAMBDA_RED),
+                    (Y_G_fraction, self.LAMBDA_GREEN),
+                    (Y_B_fraction, self.LAMBDA_BLUE),
+                    (Y_m_fraction, self.LAMBDA_M),
+                ])
+
+                self.Y_R = Y_R_fraction * Y_sum
+                self.Y_G = Y_G_fraction * Y_sum
+                self.Y_B = Y_B_fraction * Y_sum
+                self.Y_m = Y_m_fraction * Y_sum
 
 
             self.Y_R = round(self.Y_R, self.N_ROUND)   
             self.Y_G = round(self.Y_G, self.N_ROUND)
             self.Y_B = round(self.Y_B, self.N_ROUND)
+            self.Y_m = round(self.Y_m, self.N_ROUND)
 
             eps_Y_R = EPS_INT * self.converter.get_v_lambda(self.LAMBDA_RED) 
             eps_Y_G = EPS_INT * self.converter.get_v_lambda(self.LAMBDA_GREEN)
@@ -984,7 +1126,10 @@ class Gamut():
 
 
     def update_spectral_visualizer(self):
-        if self.ax2_mode != "spectra":
+        if self.ax2_mode != "spectra" or not self.visualize_spectra:
+            return
+
+        if not hasattr(self, "spectra_line_R"):
             return
         
         I_R, I_G, I_B, I_m = self.get_intensities_from_Y()
@@ -1024,7 +1169,7 @@ class Gamut():
             self.text_info[2].set_text(f'Y_sum1 = {Y_sum1} Y_sum2 = {Y_sum2}')
         
         
-        self.text_info[3].set_text(f'Y_step = {self.Y_STEP}')
+        self.text_info[3].set_text(f'Y_step = {self.Y_STEP}, Y_scale = {self.Y_scale_coeff}')
 
         I_R, I_G, I_B, I_m = self.get_intensities_from_Y()
 
@@ -1081,6 +1226,34 @@ class Gamut():
         
         self.Y_STEP = round(Y_STEP, self.N_ROUND)
         self.update_text_info()
+
+
+    def update_scale_slider(self, Y_scale_coeff):
+        
+        self.Y_scale_coeff = round(Y_scale_coeff, self.N_ROUND)
+        self.update_text_info()
+
+
+    def scale_luminances(self, scale_coeff):
+        prev_values = [self.Y_R, self.Y_G, self.Y_B, self.Y_m, self.LAMBDA_M]
+
+        self.Y_R = round(max(0, self.Y_R * scale_coeff), self.N_ROUND)
+        self.Y_G = round(max(0, self.Y_G * scale_coeff), self.N_ROUND)
+        self.Y_B = round(max(0, self.Y_B * scale_coeff), self.N_ROUND)
+        self.Y_m = round(max(0, self.Y_m * scale_coeff), self.N_ROUND)
+
+        try:
+            self.redraw_gamut(prev_values)
+        except Exception as exc:
+            self.Y_R, self.Y_G, self.Y_B, self.Y_m, self.LAMBDA_M = prev_values
+            self.update_points_and_text_info()
+            self.update_primaries_triangle()
+            self.update_spectral_visualizer()
+            self.fig.canvas.draw_idle()
+            print(f"brightness scaling failed: {exc}")
+            return False
+
+        return True
 
 
     def redraw_gamut(self, prev_values = None):
