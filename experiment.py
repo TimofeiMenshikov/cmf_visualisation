@@ -107,9 +107,7 @@ class AoDeviceExperiment():
         textbox.text_disp.set_fontsize(12)
         textbox.text_disp.set_color(TEXT_COLOR)
 
-        x, y = textbox.label.get_position()
-
-        textbox.label.set_position((x - 0.22, y))  # больше отрицательное — дальше от поля
+        textbox.label.set_horizontalalignment("right")
         textbox.label.set_fontsize(12)
         textbox.label.set_color(MUTED_TEXT)
 
@@ -132,12 +130,12 @@ class AoDeviceExperiment():
         #if self.visualize_spectra: return None, None
 
         plt.figure(self.gamut.fig.number)  # Делаем fig1 активной
-        ax_cmf_button = plt.axes([0.60, 0.585, 0.10, 0.04], facecolor=BUTTON_COLOR)
-        ax_metrics_button = plt.axes([0.715, 0.585, 0.115, 0.04], facecolor=BUTTON_COLOR)
-        ax_save_button = plt.axes([0.845, 0.585, 0.06, 0.04], facecolor=BUTTON_COLOR)
-        ax_reset_button = plt.axes([0.92, 0.585, 0.065, 0.04], facecolor=RESET_COLOR)
-        ax_scale_up_button = plt.axes([0.60, 0.525, 0.04, 0.035], facecolor=BUTTON_COLOR)
-        ax_scale_down_button = plt.axes([0.615, 0.485, 0.04, 0.035], facecolor=RESET_COLOR)
+        ax_cmf_button = plt.axes([0.60, 0.585, 0.095, 0.04], facecolor=BUTTON_COLOR)
+        ax_metrics_button = plt.axes([0.707, 0.585, 0.112, 0.04], facecolor=BUTTON_COLOR)
+        ax_save_button = plt.axes([0.831, 0.585, 0.057, 0.04], facecolor=BUTTON_COLOR)
+        ax_reset_button = plt.axes([0.90, 0.585, 0.06, 0.04], facecolor=RESET_COLOR)
+        ax_scale_up_button = plt.axes([0.60, 0.525, 0.045, 0.035], facecolor=BUTTON_COLOR)
+        ax_scale_down_button = plt.axes([0.60, 0.485, 0.045, 0.035], facecolor=RESET_COLOR)
     
 
         show_cmf_button = Button(ax_cmf_button, 'Show CMF', color=BUTTON_COLOR, hovercolor=BUTTON_HOVER_COLOR)

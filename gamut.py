@@ -577,7 +577,7 @@ class Gamut():
 
     def __style_spectra_axes(self):
         self.__style_panel(self.ax2)
-        self.ax2.set_title("Spectra", fontsize=13, color=TEXT_COLOR, pad=10)
+        self.ax2.set_title("Spectra", fontsize=13, color=TEXT_COLOR, pad=2)
         self.ax2.set_xlabel("Wavelength, nm", color=MUTED_TEXT)
         self.ax2.set_ylabel("Intensity", color=MUTED_TEXT)
         self.ax2.tick_params(colors=MUTED_TEXT, labelsize=10)
@@ -731,10 +731,17 @@ class Gamut():
 
 
     def __init_slider(self):
+<<<<<<< HEAD
 
         #if self.visualize_spectra: return 
 
         slider_ax = plt.axes([0.66, 0.535, 0.25, 0.025], facecolor=PANEL_BG)
+=======
+
+        #if self.visualize_spectra: return 
+
+        slider_ax = plt.axes([0.69, 0.535, 0.23, 0.025], facecolor=PANEL_BG)
+>>>>>>> e109251 (Sync current cmf visualization files)
         slider = Slider(
             slider_ax,
             'Y_STEP',
@@ -746,6 +753,8 @@ class Gamut():
             track_color="#dbeafe",
             handle_style={"facecolor": "#1d4ed8", "edgecolor": "white", "size": 9},
         )
+        slider.label.set_horizontalalignment("right")
+        slider.label.set_x(-0.015)
         slider.label.set_fontsize(10)
         slider.label.set_color(MUTED_TEXT)
         slider.valtext.set_fontsize(10)
@@ -759,10 +768,10 @@ class Gamut():
 
     def __init_scale_slider(self):
 
-        slider_ax = plt.axes([0.66, 0.495, 0.25, 0.025], facecolor=PANEL_BG)
+        slider_ax = plt.axes([0.69, 0.495, 0.23, 0.025], facecolor=PANEL_BG)
         slider = Slider(
             slider_ax,
-            'Y_scale_coeff',
+            'scale',
             1.01,
             2,
             valinit=self.Y_scale_coeff,
@@ -771,6 +780,8 @@ class Gamut():
             track_color="#ccfbf1",
             handle_style={"facecolor": "#0f766e", "edgecolor": "white", "size": 9},
         )
+        slider.label.set_horizontalalignment("right")
+        slider.label.set_x(-0.015)
         slider.label.set_fontsize(10)
         slider.label.set_color(MUTED_TEXT)
         slider.valtext.set_fontsize(10)
